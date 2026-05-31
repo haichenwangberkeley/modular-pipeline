@@ -130,6 +130,7 @@ Start with:
 - `modular_pipeline/docs/REPRODUCTION.md`
 - `modular_pipeline/docs/PORTABILITY.md`
 - `modular_pipeline/docs/FIT_SIGNIFICANCE_NOTES.md`
+- `modular_pipeline/docs/OFFICIAL_BACKGROUND_SELECTION.md`
 - `modular_pipeline/docs/TROUBLESHOOTING.md`
 
 ## Tests

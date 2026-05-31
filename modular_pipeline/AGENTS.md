@@ -39,6 +39,7 @@ pytest -q
 - `cli.py`: command line interface.
 - `README.md`: short user-facing command examples.
 - `docs/`: operational notes for agents, including `PORTABILITY.md` for fresh-machine setup.
+- `docs/OFFICIAL_BACKGROUND_SELECTION.md`: optional HHXYY `bkgParamTool` background-selection cross-check.
 - `<outputs>/modular_pipeline_manifest.json`: record of what ran, what was masked, and what was dependency-skipped.
 - `<outputs>/modular_pipeline_state.json`: incremental artifact ledger and entrypoint-readiness map.
 
@@ -159,6 +160,18 @@ The local statistical setup only matched after these conditions were enforced:
 - fixed Bernstein tail variables must be retained in Python object lists so RooFit does not see dangling objects;
 - do not pass explicit `Range("full")` to the combined simultaneous extended fit;
 - for the validated reproduction, local Bernstein coefficients are constrained positive for RooFit validity while HHXYY remains the central expected-significance backend.
+
+The official HHXYY background-function selector is available as a separate
+cross-check/substitution tool:
+
+```bash
+hgg-official-bkg-select parse \
+  --bkg-model-dir outputs_modular_full/fit/FIT1/hhxyy_workspace/bkg_model \
+  --out outputs_modular_full/fit/FIT1/official_bkg_selection.json
+```
+
+This must remain opt-in; do not overwrite the local selector artifacts merely
+because official results are present.
 
 ## Verification Before Handoff
 
