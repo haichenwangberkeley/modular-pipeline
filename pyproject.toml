@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modular-pipeline"
+version = "0.1.0"
+description = "Maskable orchestration and artifact-readiness tracking for the Hgg analysis pipeline"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "haichenwangberkeley", email = "haichenwang@berkeley.edu" },
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+]
+
+[project.scripts]
+modular-pipeline = "modular_pipeline.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["modular_pipeline"]
+
+[tool.setuptools.package-data]
+modular_pipeline = ["*.md", "docs/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
