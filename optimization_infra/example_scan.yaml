@@ -1,0 +1,29 @@
+scan_id: example_histogram_bin_width_dry_run
+parent_run_id: baseline_001
+branch_id: baseline_branch
+strategy_id: baseline_strategy
+objective_metric: expected_significance
+description: >
+  Example dry-run scan over an already-supported histogramming parameter.
+  This is an infrastructure example only and should not be launched as a
+  substantive optimization campaign without a validated baseline registry entry.
+
+base_config: modular-pipeline/analysis/analysis.summary.json
+parent_config: modular-pipeline/analysis/analysis.summary.json
+workflow_graph: optimization_infra/workflow_graph.yaml
+artifact_manifests: []
+
+parameters:
+  - config_path: runtime_defaults.histogramming.mass_bin_width_gev
+    values: [0.5, 1.0, 2.0]
+
+execution:
+  max_parallel_jobs: 1
+  reuse_valid_artifacts: true
+  stop_on_verifier_failure: false
+  dry_run_only: true
+
+reporting:
+  summarize_cut_flow_changes: true
+  summarize_yield_changes: true
+  summarize_metric_changes: true

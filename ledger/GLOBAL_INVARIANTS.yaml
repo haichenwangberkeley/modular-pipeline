@@ -1,0 +1,148 @@
+schema_version: 0.1.0
+created: 2026-05-31
+status: proposed
+
+scientific_invariants:
+  - id: sci_event_weight_data
+    rule: Data events have unit weight.
+    source_evidence:
+      - modular-pipeline/analysis/hists/histmaker.py
+    ordinary_optimization_may_change: false
+  - id: sci_event_weight_mc
+    rule: >
+      MC event weights use normalization factor times mcWeight times available
+      pileup, photon, and JVT scale factors.
+    source_evidence:
+      - modular-pipeline/analysis/hists/histmaker.py
+      - modular-pipeline/analysis/samples/registry.py
+    ordinary_optimization_may_change: false
+  - id: sci_luminosity_policy
+    rule: The current central luminosity policy is 36.1 fb-1 unless a reviewed physics-policy change approves another value.
+    source_evidence:
+      - modular-pipeline/analysis/config/load_summary.py
+      - modular-pipeline/analysis/analysis.summary.json
+    ordinary_optimization_may_change: false
+  - id: sci_blinding_default
+    rule: Observed significance is blocked by default; signal-window plotting and fit use of observed data follow declared blinding fields.
+    source_evidence:
+      - modular-pipeline/analysis/config/load_summary.py
+      - modular-pipeline/analysis/stats/significance.py
+      - outputs_modular_hgg_20260531T213216Z/report/blinding_summary.json
+    ordinary_optimization_may_change: false
+  - id: sci_nominal_alternative_samples
+    rule: Nominal and alternative sample roles must retain their declared meaning and selection policy.
+    source_evidence:
+      - modular-pipeline/analysis/samples/registry.py
+      - outputs_modular_hgg_20260531T213216Z/report/mc_sample_selection.json
+    ordinary_optimization_may_change: false
+  - id: sci_region_exclusivity
+    rule: Signal-region category assignment is exclusive unless a declared overlap policy says otherwise.
+    source_evidence:
+      - modular-pipeline/analysis/selections/engine.py
+      - outputs_modular_hgg_20260531T213216Z/validation/overlap_policy.json
+    ordinary_optimization_may_change: false
+  - id: sci_fit_mass_and_signal_window_meanings
+    rule: Fit mass range, signal window, and sideband definitions must retain their declared scientific meaning.
+    source_evidence:
+      - modular-pipeline/analysis/config/load_summary.py
+      - modular-pipeline/analysis/hists/histmaker.py
+    ordinary_optimization_may_change: false
+  - id: sci_expected_significance_parameter_policy
+    rule: >
+      For the validated expected-significance path, signal-shape parameters are
+      fixed from signal MC fits while background normalizations and background
+      shape parameters float.
+    source_evidence:
+      - modular-pipeline/modular_pipeline/docs/FIT_SIGNIFICANCE_NOTES.md
+      - modular-pipeline/modular_pipeline/AGENTS.md
+    ordinary_optimization_may_change: false
+  - id: sci_systematics_not_final_until_reviewed
+    rule: Placeholder systematics must not be represented as a final scientific systematic model without human approval.
+    source_evidence:
+      - modular-pipeline/analysis/config/load_summary.py
+      - modular-pipeline/analysis/stats/systematics.py
+    ordinary_optimization_may_change: false
+
+interface_invariants:
+  - id: int_cli_entrypoints
+    rule: Existing CLI entrypoint names must not change without migration support.
+    source_evidence:
+      - modular-pipeline/pyproject.toml
+    ordinary_optimization_may_change: false
+  - id: int_config_field_meanings
+    rule: Existing configuration field meanings must remain stable.
+    source_evidence:
+      - modular-pipeline/analysis/analysis.summary.json
+      - modular-pipeline/analysis/config/load_summary.py
+    ordinary_optimization_may_change: false
+  - id: int_required_outputs
+    rule: Required output artifacts used by downstream consumers must remain available.
+    source_evidence:
+      - modular-pipeline/modular_pipeline/components.py
+      - modular-pipeline/modular_pipeline/tracking.py
+    ordinary_optimization_may_change: false
+  - id: int_histogram_schema
+    rule: Histogram outputs must include bin edges, counts, sumw2, weighted yield, and entries where applicable.
+    source_evidence:
+      - modular-pipeline/analysis/hists/histmaker.py
+    ordinary_optimization_may_change: false
+  - id: int_component_masks
+    rule: Component and group mask meanings must remain stable or be migrated.
+    source_evidence:
+      - modular-pipeline/modular_pipeline/components.py
+      - modular-pipeline/tests/test_modular_pipeline.py
+    ordinary_optimization_may_change: false
+  - id: int_output_schema_versioning
+    rule: New or changed durable output schemas should carry explicit schema/version metadata.
+    source_evidence:
+      - proposed_by_audit
+    ordinary_optimization_may_change: false
+
+provenance_invariants:
+  - id: prov_config_snapshot
+    rule: Every run must preserve the exact effective configuration snapshot.
+    source_evidence:
+      - outputs_modular_hgg_20260531T213216Z/summary.normalized.json
+    ordinary_optimization_may_change: false
+  - id: prov_manifest_state
+    rule: Every modular run must preserve manifest and state artifacts.
+    source_evidence:
+      - modular-pipeline/modular_pipeline/components.py
+      - modular-pipeline/modular_pipeline/tracking.py
+    ordinary_optimization_may_change: false
+  - id: prov_service_versions
+    rule: Runs should record service versions and source tree state for future comparisons.
+    source_evidence:
+      - proposed_by_audit
+    ordinary_optimization_may_change: false
+  - id: prov_input_traceability
+    rule: Results must be traceable to input sample files, sample roles, normalization metadata, and configuration.
+    source_evidence:
+      - modular-pipeline/analysis/samples/registry.py
+      - outputs_modular_hgg_20260531T213216Z/samples.registry.json
+    ordinary_optimization_may_change: false
+  - id: prov_comparable_conditions
+    rule: Optimization comparisons must use comparable inputs, blinding state, runtime settings, and verification status.
+    source_evidence:
+      - proposed_by_audit
+    ordinary_optimization_may_change: false
+
+change_control_invariants:
+  - id: cc_config_first
+    rule: Configuration-only optimization is the default strategy.
+    ordinary_optimization_may_change: false
+  - id: cc_service_change_requires_tests
+    rule: Executable-service changes require explicit justification and tests or documented verification.
+    ordinary_optimization_may_change: false
+  - id: cc_ledger_changelog_atomic
+    rule: Service changes must update the executable-services ledger and changelog with the code change.
+    ordinary_optimization_may_change: false
+  - id: cc_backward_incompatible_requires_approval
+    rule: Backward-incompatible service changes require migration notes and explicit human approval.
+    ordinary_optimization_may_change: false
+  - id: cc_physics_policy_requires_approval
+    rule: Physics-policy changes may be proposed but must not be implemented without explicit human approval.
+    ordinary_optimization_may_change: false
+  - id: cc_no_generated_source_of_truth
+    rule: Generated artifacts must not silently become authoritative policy or configuration.
+    ordinary_optimization_may_change: false

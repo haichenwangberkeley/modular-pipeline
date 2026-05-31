@@ -1,0 +1,630 @@
+schema_version: 0.1.0
+created: 2026-05-31
+status: proposed
+notes:
+  - This ledger documents proposed durable service boundaries for the current workspace.
+  - Existing source paths are retained; promotion to separate service directories requires later review.
+
+services:
+  - service_id: modular_pipeline_orchestrator
+    name: Modular Pipeline Orchestrator
+    status: existing
+    version: 0.1.0
+    purpose: >
+      Run the canonical H to gamma gamma analysis through ordered, maskable
+      components while recording manifest and artifact-readiness state.
+    entrypoint: modular-pipeline
+    implementation_paths:
+      - modular-pipeline/modular_pipeline/cli.py
+      - modular-pipeline/modular_pipeline/components.py
+      - modular-pipeline/modular_pipeline/tracking.py
+    interface_type: cli
+    inputs:
+      - name: summary
+        type: json
+        required: true
+        schema: modular-pipeline/analysis/config/summary_schema.py
+      - name: inputs
+        type: directory
+        required: true
+        schema: data/ and MC/ ROOT-file layout
+      - name: outputs
+        type: directory
+        required: true
+      - name: mask
+        type: comma_separated_component_names
+        required: false
+    outputs:
+      - name: modular_pipeline_manifest
+        type: json
+        required: true
+      - name: modular_pipeline_state
+        type: json
+        required: true
+      - name: component_artifacts
+        type: directory
+        required: true
+    consumers:
+      - future_optimization_agents
+      - human_analysis_runs
+      - artifact_inspection_workflow
+    invariants:
+      - Component order must preserve canonical analysis behavior unless a reviewed change is approved.
+      - Masked runs must not be represented as validated full physics runs.
+      - Unknown masks must fail.
+    extension_points:
+      - New components may be added if dependencies, artifacts, masks, and tests are declared.
+      - New artifact-readiness loaders may be added without changing existing readiness meanings.
+    backward_compatibility:
+      guarantee: >
+        Existing CLI commands and component names should continue to work unless
+        a documented migration is provided.
+      compatibility_tests:
+        - modular-pipeline/tests/test_modular_pipeline.py
+    verification:
+      tests:
+        - modular-pipeline/tests/test_modular_pipeline.py
+      required_artifacts:
+        - modular_pipeline_manifest.json
+        - modular_pipeline_state.json
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: true
+    notes:
+      - "Current `--start-at` artifact hydration is inspected but not implemented."
+
+  - service_id: summary_normalizer
+    name: Summary Normalizer And Runtime Defaults
+    status: existing
+    version: 0.1.0
+    purpose: >
+      Validate analysis-summary structure, derive canonical categories,
+      materialize runtime defaults, and write normalized summary artifacts.
+    entrypoint: hgg-load-summary
+    implementation_paths:
+      - modular-pipeline/analysis/config/load_summary.py
+      - modular-pipeline/analysis/config/summary_schema.py
+    interface_type: cli_and_python
+    inputs:
+      - name: analysis_summary
+        type: json
+        required: true
+        schema: modular-pipeline/analysis/config/summary_schema.py
+    outputs:
+      - name: normalized_summary
+        type: json
+        required: true
+      - name: inventory
+        type: json
+        required: false
+      - name: diagnostics
+        type: json
+        required: false
+      - name: regions_yaml
+        type: yaml
+        required: false
+    consumers:
+      - hgg-analysis
+      - modular_pipeline_orchestrator
+      - preflight_verifier
+      - downstream_analysis_services
+    invariants:
+      - Existing summary field meanings must not change silently.
+      - Runtime defaults that encode physics policy require human approval before semantic changes.
+      - Config hashes must change when effective normalized configuration changes.
+    extension_points:
+      - Add optional fields with defaults.
+      - Add stricter validation as warnings before making it blocking.
+    backward_compatibility:
+      guarantee: Existing valid summary JSON files continue to normalize unless migration notes are provided.
+      compatibility_tests:
+        - modular-pipeline/tests/test_modular_pipeline.py
+    verification:
+      tests:
+        - modular-pipeline/tests/test_modular_pipeline.py
+      required_artifacts:
+        - summary.normalized.json
+        - validation/inventory.json
+        - validation/diagnostics.json
+        - validation/overlap_policy.json
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: true
+    notes:
+      - "`DEFAULT_RUNTIME` currently mixes physics policy and tunable configuration."
+
+  - service_id: preflight_verifier
+    name: Preflight Verifier
+    status: existing
+    version: 0.1.0
+    purpose: >
+      Check that declared inputs, summary contents, and expected runtime
+      prerequisites are plausible before expensive analysis stages run.
+    entrypoint: hgg-preflight
+    implementation_paths:
+      - modular-pipeline/analysis/preflight.py
+    interface_type: cli_and_python
+    inputs:
+      - name: summary
+        type: json
+        required: true
+      - name: inputs
+        type: directory
+        required: true
+      - name: outputs
+        type: directory
+        required: true
+    outputs:
+      - name: preflight_fact_check
+        type: json
+        required: true
+    consumers:
+      - modular_pipeline_orchestrator
+      - human_analysis_runs
+    invariants:
+      - Preflight failures must block downstream claims of a valid run.
+      - Preflight must not alter physics configuration.
+    extension_points:
+      - Add checks for ROOT availability, sample count, branch presence, and policy consistency.
+    backward_compatibility:
+      guarantee: Additional checks should be introduced as warnings before becoming hard failures.
+      compatibility_tests: []
+    verification:
+      tests: []
+      required_artifacts:
+        - report/preflight_fact_check.json
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: false
+    notes:
+      - Needs direct tests and a formal pass/fail schema.
+
+  - service_id: sample_registry
+    name: Sample Registry And Normalization
+    status: existing
+    version: 0.1.0
+    purpose: >
+      Discover ROOT files, classify data/signal/background samples, choose
+      nominal and alternative samples, and produce normalization metadata.
+    entrypoint: hgg-sample-registry
+    implementation_paths:
+      - modular-pipeline/analysis/samples/metadata.py
+      - modular-pipeline/analysis/samples/registry.py
+      - modular-pipeline/analysis/samples/strategy.py
+    interface_type: cli_and_python
+    inputs:
+      - name: inputs
+        type: directory
+        required: true
+        schema: input-data/{data,MC}/*.root
+      - name: summary
+        type: json
+        required: true
+      - name: target_lumi_fb
+        type: float
+        required: true
+    outputs:
+      - name: samples_registry
+        type: json
+        required: true
+      - name: mc_sample_selection
+        type: json
+        required: true
+      - name: normalization_table
+        type: json
+        required: true
+      - name: background_strategy
+        type: json
+        required: true
+    consumers:
+      - event_processor_histogram_builder
+      - fit_builder
+      - report_builder
+    invariants:
+      - Data samples must use unit event weights.
+      - MC normalization must preserve the declared luminosity, cross-section, k-factor, filter efficiency, and sumw convention.
+      - Nominal and alternative sample meanings must not change silently.
+      - Prompt-diphoton nominal template selection policy requires review before semantic changes.
+    extension_points:
+      - Add new process-token mappings.
+      - Add additional metadata fields without changing existing meanings.
+    backward_compatibility:
+      guarantee: Existing registry fields remain present and semantically stable.
+      compatibility_tests: []
+    verification:
+      tests: []
+      required_artifacts:
+        - samples.registry.json
+        - report/mc_sample_selection.json
+        - normalization/norm_table.json
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: true
+    notes:
+      - Classification token rules are physics-sensitive and need explicit policy extraction.
+
+  - service_id: event_processor_histogram_builder
+    name: Event Processor And Histogram Builder
+    status: existing
+    version: 0.1.0
+    purpose: >
+      Read event trees, build photon and jet objects, apply selections and
+      categories, compute event weights and cutflows, cache selected events,
+      and produce mass templates with sumw2.
+    entrypoint: hgg-histmaker
+    implementation_paths:
+      - modular-pipeline/analysis/io/readers.py
+      - modular-pipeline/analysis/objects/photons.py
+      - modular-pipeline/analysis/objects/jets.py
+      - modular-pipeline/analysis/selections/engine.py
+      - modular-pipeline/analysis/hists/histmaker.py
+    interface_type: cli_and_python
+    inputs:
+      - name: registry
+        type: json
+        required: true
+      - name: normalized_summary
+        type: json
+        required: true
+      - name: root_files
+        type: ROOT
+        required: true
+    outputs:
+      - name: processed_samples
+        type: json
+        required: true
+      - name: histogram_templates
+        type: json
+        required: true
+      - name: sample_caches
+        type: npz
+        required: true
+      - name: cutflow
+        type: json
+        required: true
+    consumers:
+      - fit_builder
+      - significance_calculator
+      - plot_report_builder
+      - optimization_comparison
+    invariants:
+      - Histogram bin edges must be recorded.
+      - "`sumw2` must be recorded for weighted histograms."
+      - Event weights must follow the declared normalization policy.
+      - Category assignment must be exclusive unless policy declares otherwise.
+      - Blinded signal-window flags must retain their declared meaning.
+    extension_points:
+      - Add derived features.
+      - Add histogram definitions through configuration after schema support.
+      - Add cache fields without removing existing fields.
+    backward_compatibility:
+      guarantee: Existing output-field meanings and cache keys must remain valid unless migrated.
+      compatibility_tests: []
+    verification:
+      tests: []
+      required_artifacts:
+        - hists/templates.json
+        - hists/processed_samples.json
+        - report/cutflow_table.json
+        - report/yields_by_category.json
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: true
+    notes:
+      - Needs direct unit tests for weighting, object selection, category assignment, and histogram schemas.
+
+  - service_id: fit_builder
+    name: RooFit Fit Builder
+    status: existing
+    version: 0.1.0
+    purpose: >
+      Build signal and background models, construct RooFit workspaces, run the
+      measurement fit, and write fit results/provenance.
+    entrypoint: hgg-fit
+    implementation_paths:
+      - modular-pipeline/analysis/stats/models.py
+      - modular-pipeline/analysis/stats/fit.py
+      - modular-pipeline/analysis/stats/hhxyy_fitting_backend.py
+    interface_type: cli_and_python
+    inputs:
+      - name: processed_samples
+        type: in_memory_or_cache
+        required: true
+      - name: registry
+        type: json
+        required: true
+      - name: normalized_summary
+        type: json
+        required: true
+    outputs:
+      - name: fit_results
+        type: json
+        required: true
+      - name: fit_workspace
+        type: root
+        required: true
+      - name: fit_provenance
+        type: json
+        required: true
+      - name: model_selection_artifacts
+        type: json
+        required: true
+    consumers:
+      - significance_calculator
+      - plot_report_builder
+      - optimization_comparison
+    invariants:
+      - Signal-shape parameters are fixed from signal MC fits for the validated expected path.
+      - Background normalizations and shape parameters float in Asimov fits.
+      - HHXYY-style Bernstein mapping and fixed trailing coefficient handling must be preserved unless reviewed.
+      - Fit status and covariance quality must be recorded.
+    extension_points:
+      - Add optional background models through declared model candidates.
+      - Add backend comparison artifacts without changing central results.
+    backward_compatibility:
+      guarantee: Existing fit JSON fields and workspace production remain available.
+      compatibility_tests: []
+    verification:
+      tests: []
+      required_artifacts:
+        - fit/FIT1/results.json
+        - fit/FIT1/fit_provenance.json
+        - fit/FIT1/workspace.root
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: true
+    notes:
+      - Needs baseline numerical compatibility tests against validated reference outputs.
+
+  - service_id: significance_calculator
+    name: Significance Calculator
+    status: existing
+    version: 0.1.0
+    purpose: >
+      Compute expected Asimov and, when explicitly authorized, observed
+      discovery significance from fit outputs while enforcing blinding policy.
+    entrypoint: analysis.stats.significance.run_significance
+    implementation_paths:
+      - modular-pipeline/analysis/stats/significance.py
+      - modular-pipeline/analysis/stats/hhxyy_fitting_backend.py
+    interface_type: python
+    inputs:
+      - name: fit_context
+        type: python_object
+        required: true
+      - name: normalized_summary
+        type: json
+        required: true
+    outputs:
+      - name: significance_asimov
+        type: json
+        required: true
+      - name: significance_observed_or_blocked
+        type: json
+        required: true
+      - name: significance_provenance
+        type: json
+        required: true
+    consumers:
+      - optimization_comparison
+      - plot_report_builder
+      - human_review
+    invariants:
+      - Observed significance remains blocked unless human-approved unblinding is explicitly enabled.
+      - Expected significance must record backend, q0, z, mu_hat, fit status, and diagnostics.
+      - Local and HHXYY backend roles must be declared in outputs.
+    extension_points:
+      - Add alternative expected-significance diagnostics.
+      - Add independent cross-check backend output without replacing central interpretation.
+    backward_compatibility:
+      guarantee: Existing significance JSON keys remain available.
+      compatibility_tests: []
+    verification:
+      tests: []
+      required_artifacts:
+        - fit/FIT1/significance_asimov.json
+        - fit/FIT1/significance.json
+        - fit/FIT1/significance_parameter_policy.json
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: true
+    notes:
+      - Observed significance approval policy is a human-review item.
+
+  - service_id: background_selector_bridge
+    name: Official Background Selector Bridge
+    status: existing
+    version: 0.1.0
+    purpose: >
+      Parse, prepare, or run optional HHXYY bkgParamTool background-selection
+      artifacts for comparison with or reviewed substitution for local choices.
+    entrypoint: hgg-official-bkg-select
+    implementation_paths:
+      - modular-pipeline/analysis/stats/official_bkg_selector.py
+    interface_type: cli_and_python
+    inputs:
+      - name: hhxyy_results_or_config
+        type: file_or_directory
+        required: true
+    outputs:
+      - name: official_background_selection
+        type: json
+        required: true
+    consumers:
+      - fit_builder
+      - human_review
+    invariants:
+      - Official selector artifacts are opt-in and must not silently overwrite local selector artifacts.
+      - Local-equivalent model mapping must be explicit.
+    extension_points:
+      - Add parsers for additional HHXYY output formats.
+      - Add new official model mappings.
+    backward_compatibility:
+      guarantee: Existing parse and config-generation behavior remains covered by tests.
+      compatibility_tests:
+        - modular-pipeline/tests/test_official_bkg_selector.py
+    verification:
+      tests:
+        - modular-pipeline/tests/test_official_bkg_selector.py
+      required_artifacts:
+        - official_bkg_selection.json
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: true
+    notes:
+      - Already has focused tests and is a good model for future service testing.
+
+  - service_id: plot_report_builder
+    name: Blinded Plot And Report Builder
+    status: existing
+    version: 0.1.0
+    purpose: >
+      Produce blinded plots, cutflow/yield summaries, validation artifacts, and
+      human-readable reports from pipeline outputs.
+    entrypoint: analysis.report.make_report.build_report
+    implementation_paths:
+      - modular-pipeline/analysis/plotting/blinded_regions.py
+      - modular-pipeline/analysis/plotting/hhxyy_fit_plots.py
+      - modular-pipeline/analysis/report/artifacts.py
+      - modular-pipeline/analysis/report/make_report.py
+    interface_type: python_and_cli_utilities
+    inputs:
+      - name: processed_samples
+        type: in_memory_or_cache
+        required: true
+      - name: normalized_summary
+        type: json
+        required: true
+      - name: fit_context
+        type: python_object
+        required: true
+    outputs:
+      - name: plot_manifest
+        type: json
+        required: true
+      - name: report_artifacts
+        type: json
+        required: true
+      - name: report
+        type: markdown_or_pdf
+        required: false
+    consumers:
+      - human_review
+      - documentation_generation
+    invariants:
+      - Blinding policy must be honored in all observed-data plots.
+      - Cutflow and yield artifact meanings must remain stable.
+      - Action completion is not equivalent to verification success.
+    extension_points:
+      - Add new plots and report sections without removing existing artifacts.
+      - Add independent verifier outputs.
+    backward_compatibility:
+      guarantee: Existing report artifact paths remain available.
+      compatibility_tests: []
+    verification:
+      tests: []
+      required_artifacts:
+        - report/cutflow_table.json
+        - report/yields_by_category.json
+        - report/blinding_summary.json
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: true
+    notes:
+      - Verification logic should be separated from artifact-writing actions over time.
+
+  - service_id: optimization_orchestrator
+    name: Optimization Orchestration Infrastructure
+    status: proposed
+    version: 0.1.0
+    purpose: >
+      Plan resumable candidate runs, manage configuration-driven scan dry runs,
+      record run-registry entries, extract observations, summarize scans, and
+      generate human or reasoning-agent decision packets without changing
+      scientific analysis logic.
+    entrypoint: optimization_infra/plan_candidate_run.py
+    implementation_paths:
+      - optimization_infra/plan_candidate_run.py
+      - optimization_infra/run_scan.py
+      - optimization_infra/summarize_scan.py
+      - optimization_infra/create_decision_packet.py
+      - optimization_infra/workflow_graph.yaml
+      - optimization_infra/artifact_manifest_schema.yaml
+      - optimization_infra/scan_spec_schema.yaml
+    interface_type: python_and_cli
+    inputs:
+      - name: workflow_graph
+        type: yaml
+        required: true
+        schema: optimization_infra/workflow_graph.yaml
+      - name: candidate_config
+        type: yaml_or_json
+        required: true
+      - name: parent_config
+        type: yaml_or_json
+        required: true
+      - name: artifact_manifests
+        type: yaml_json_or_jsonl
+        required: false
+      - name: executable_services_ledger
+        type: yaml
+        required: true
+      - name: global_invariants
+        type: yaml
+        required: true
+    outputs:
+      - name: execution_plan
+        type: yaml_and_markdown
+        required: true
+      - name: run_registry_entry
+        type: jsonl
+        required: false
+      - name: observations
+        type: yaml
+        required: false
+      - name: scan_summary
+        type: yaml_and_markdown
+        required: false
+      - name: decision_packet
+        type: yaml_and_markdown
+        required: false
+    consumers:
+      - future_optimization_agents
+      - human_review
+      - qualitative_strategy_decision_workflow
+    invariants:
+      - Do not launch substantive optimization from infrastructure dry-run tools.
+      - Do not reuse artifacts unless provenance, verifier, schema, service-version, upstream, config-subset, and invariant checks pass.
+      - Do not allow observed-significance unblinding without recorded approval.
+      - Preserve negative, ambiguous, suspicious, and invalid candidate records.
+    extension_points:
+      - Add executable runners once verifiers and baseline registry entries are established.
+      - Add compatibility adapters for artifact schema migrations.
+      - Add richer observation extraction from real cutflow, yield, shape, and fit artifacts.
+    backward_compatibility:
+      guarantee: >
+        Existing scientific services and CLI entrypoints are untouched; optimizer
+        infrastructure is additive.
+      compatibility_tests:
+        - tests/test_optimization_infra.py
+    verification:
+      tests:
+        - tests/test_optimization_infra.py
+      required_artifacts:
+        - runs/<run_id>/EXECUTION_PLAN.md
+        - runs/<run_id>/execution_plan.yaml
+    change_control:
+      ledger_update_required: true
+      changelog_update_required: true
+      compatibility_review_required: true
+    notes:
+      - Current scan support creates candidate snapshots and dry-run plans only; it does not execute scientific workflows.

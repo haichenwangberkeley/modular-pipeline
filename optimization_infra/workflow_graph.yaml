@@ -1,0 +1,560 @@
+workflow_id: main_analysis_workflow
+version: 0.1.0
+description: >
+  Dependency graph for the current modular H to gamma gamma analysis workflow.
+  Stages reflect existing executable boundaries where possible and finer reuse
+  semantics where needed for planning.
+
+stages:
+  - stage_id: summary_normalization
+    name: Summary Normalization
+    purpose: Validate and normalize the analysis summary and materialize runtime defaults.
+    service_id: summary_normalizer
+    command: hgg-load-summary --summary {summary} --out {outputs}/summary.normalized.json
+    depends_on: []
+    config_dependencies:
+      - analysis_metadata
+      - analysis_objectives
+      - signal_signatures
+      - background_processes
+      - signal_regions
+      - control_regions
+      - fit_setup
+      - runtime_defaults
+      - blinding
+    inputs:
+      - artifact_type: analysis_summary
+        schema_version: 1
+    outputs:
+      - artifact_type: normalized_summary
+        schema_version: 1
+      - artifact_type: validation_inventory
+        schema_version: 1
+      - artifact_type: validation_diagnostics
+        schema_version: 1
+    cacheable: true
+    verifier: validate_summary_schema
+    invalidation_rules:
+      - Invalidate when any summary field or runtime default changes.
+      - Invalidate when physics-policy invariants change.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: fast
+    failure_handling: fail_candidate
+
+  - stage_id: runtime_contract
+    name: Runtime Contract Materialization
+    purpose: Write runtime, blinding, region, and execution-contract artifacts.
+    service_id: modular_pipeline_orchestrator
+    command: modular-pipeline run component runtime_contract
+    depends_on:
+      - summary_normalization
+    config_dependencies:
+      - runtime_defaults
+      - blinding
+      - signal_regions
+      - control_regions
+      - max_events
+    inputs:
+      - artifact_type: normalized_summary
+        schema_version: 1
+    outputs:
+      - artifact_type: runtime_recovery
+        schema_version: 1
+      - artifact_type: blinding_summary
+        schema_version: 1
+      - artifact_type: execution_contract
+        schema_version: 1
+    cacheable: true
+    verifier: verify_runtime_contract
+    invalidation_rules:
+      - Invalidate when runtime defaults, blinding fields, inputs path, or max_events change.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: fast
+    failure_handling: fail_candidate
+
+  - stage_id: preflight_validation
+    name: Preflight Validation
+    purpose: Check that inputs and declared configuration are plausible before expensive stages.
+    service_id: preflight_verifier
+    command: hgg-preflight --summary {summary} --inputs {inputs} --outputs {outputs}
+    depends_on:
+      - summary_normalization
+      - runtime_contract
+    config_dependencies:
+      - input_data
+      - analysis_summary
+      - runtime_defaults
+    inputs:
+      - artifact_type: analysis_summary
+        schema_version: 1
+      - artifact_type: input_dataset
+        schema_version: 1
+    outputs:
+      - artifact_type: preflight_fact_check
+        schema_version: 1
+    cacheable: true
+    verifier: verify_preflight_status
+    invalidation_rules:
+      - Invalidate when input dataset, summary, runtime defaults, or environment contract changes.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: fast
+    failure_handling: fail_candidate
+
+  - stage_id: metadata_resolution
+    name: Dataset Metadata Resolution
+    purpose: Resolve ROOT-file metadata and sample descriptors.
+    service_id: sample_registry
+    command: hgg-sample-metadata --inputs {inputs}
+    depends_on:
+      - preflight_validation
+    config_dependencies:
+      - input_data
+    inputs:
+      - artifact_type: input_dataset
+        schema_version: 1
+    outputs:
+      - artifact_type: sample_metadata
+        schema_version: 1
+    cacheable: true
+    verifier: verify_metadata_resolution
+    invalidation_rules:
+      - Invalidate when input files or metadata extraction service changes.
+    provenance_required:
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: medium
+    failure_handling: fail_candidate
+
+  - stage_id: sample_registry
+    name: Sample Registry And Normalization
+    purpose: Classify samples, choose nominal/alternative roles, and write normalization artifacts.
+    service_id: sample_registry
+    command: hgg-sample-registry --inputs {inputs} --summary {summary} --out {outputs}/samples.registry.json
+    depends_on:
+      - summary_normalization
+      - metadata_resolution
+    config_dependencies:
+      - analysis_objectives
+      - background_processes
+      - target_lumi_fb
+      - central_mc_lumi_fb
+      - sample_policy
+    inputs:
+      - artifact_type: sample_metadata
+        schema_version: 1
+      - artifact_type: normalized_summary
+        schema_version: 1
+    outputs:
+      - artifact_type: sample_registry
+        schema_version: 1
+      - artifact_type: normalization_table
+        schema_version: 1
+      - artifact_type: mc_sample_selection
+        schema_version: 1
+    cacheable: true
+    verifier: verify_sample_registry
+    invalidation_rules:
+      - Invalidate when input files, luminosity policy, or sample-classification policy changes.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: medium
+    failure_handling: fail_candidate
+
+  - stage_id: background_strategy
+    name: Background Strategy And Constraint Map
+    purpose: Build background modeling strategy and CR/SR constraint artifacts.
+    service_id: sample_registry
+    command: modular-pipeline component strategy
+    depends_on:
+      - summary_normalization
+      - sample_registry
+    config_dependencies:
+      - background_processes
+      - control_regions
+      - signal_regions
+      - background_model
+    inputs:
+      - artifact_type: sample_registry
+        schema_version: 1
+      - artifact_type: normalized_summary
+        schema_version: 1
+    outputs:
+      - artifact_type: sample_classification
+        schema_version: 1
+      - artifact_type: background_modeling_strategy
+        schema_version: 1
+      - artifact_type: cr_sr_constraint_map
+        schema_version: 1
+    cacheable: true
+    verifier: verify_background_strategy
+    invalidation_rules:
+      - Invalidate when region definitions, background model configuration, or sample registry changes.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: fast
+    failure_handling: fail_candidate
+
+  - stage_id: partitioning
+    name: Region Partitioning
+    purpose: Write the category/region partition specification.
+    service_id: modular_pipeline_orchestrator
+    command: hgg-selection-partition --summary {summary}
+    depends_on:
+      - summary_normalization
+    config_dependencies:
+      - signal_regions
+      - control_regions
+      - overlap_policy
+    inputs:
+      - artifact_type: normalized_summary
+        schema_version: 1
+    outputs:
+      - artifact_type: partition_spec
+        schema_version: 1
+    cacheable: true
+    verifier: verify_partition_spec
+    invalidation_rules:
+      - Invalidate when region definitions or overlap policy change.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: fast
+    failure_handling: fail_candidate
+
+  - stage_id: event_processing
+    name: Event Processing And Category Assignment
+    purpose: Read events, compute objects/features, apply selections and categories, and write caches.
+    service_id: event_processor_histogram_builder
+    command: hgg-histmaker --registry {registry} --summary {summary}
+    depends_on:
+      - sample_registry
+      - background_strategy
+      - partitioning
+    config_dependencies:
+      - tree_name
+      - photon_selection
+      - jet_selection
+      - fit_mass_range_gev
+      - signal_window_gev
+      - sidebands_gev
+      - category_definitions
+      - max_events
+    inputs:
+      - artifact_type: sample_registry
+        schema_version: 1
+      - artifact_type: input_dataset
+        schema_version: 1
+      - artifact_type: normalized_summary
+        schema_version: 1
+    outputs:
+      - artifact_type: processed_samples
+        schema_version: 1
+      - artifact_type: event_cache
+        schema_version: 1
+    cacheable: true
+    verifier: verify_processed_events
+    invalidation_rules:
+      - Invalidate when object definitions, event weights, fit mass range, category rules, sample registry, input files, or max_events change.
+      - Reuse when only downstream plotting or report style changes.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: expensive
+    failure_handling: fail_candidate
+
+  - stage_id: histogram_production
+    name: Histogram Production
+    purpose: Produce weighted mass templates with bin edges and sumw2.
+    service_id: event_processor_histogram_builder
+    command: hgg-histmaker template build
+    depends_on:
+      - event_processing
+    config_dependencies:
+      - histogramming
+      - fit_mass_range_gev
+      - category_definitions
+    inputs:
+      - artifact_type: processed_samples
+        schema_version: 1
+    outputs:
+      - artifact_type: histogram_templates
+        schema_version: 1
+    cacheable: true
+    verifier: verify_histograms
+    invalidation_rules:
+      - Invalidate when binning, fit range, categories, or processed samples change.
+      - Reuse for downstream fit-only changes when template coverage is sufficient.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: medium
+    failure_handling: fail_candidate
+
+  - stage_id: cutflow_yields
+    name: Cutflow And Yield Tables
+    purpose: Produce cutflow and yield summary artifacts.
+    service_id: plot_report_builder
+    command: analysis.report.artifacts.build_cutflow_and_yields
+    depends_on:
+      - event_processing
+    config_dependencies:
+      - category_definitions
+      - reporting.cutflow
+    inputs:
+      - artifact_type: processed_samples
+        schema_version: 1
+    outputs:
+      - artifact_type: cutflow_table
+        schema_version: 1
+      - artifact_type: yields_by_category
+        schema_version: 1
+    cacheable: true
+    verifier: verify_cutflow_yields
+    invalidation_rules:
+      - Invalidate when processed samples or category definitions change.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: fast
+    failure_handling: mark_candidate_invalid
+
+  - stage_id: fit_construction
+    name: Statistical Model Construction And Fit
+    purpose: Build statistical model/workspace and run fit.
+    service_id: fit_builder
+    command: hgg-fit --summary {summary}
+    depends_on:
+      - histogram_production
+      - sample_registry
+      - background_strategy
+    config_dependencies:
+      - fit_setup
+      - fit_mass_range_gev
+      - background_model
+      - smoothing_policy
+      - systematics
+    inputs:
+      - artifact_type: histogram_templates
+        schema_version: 1
+      - artifact_type: sample_registry
+        schema_version: 1
+      - artifact_type: normalized_summary
+        schema_version: 1
+    outputs:
+      - artifact_type: fit_results
+        schema_version: 1
+      - artifact_type: fit_workspace
+        schema_version: 1
+      - artifact_type: fit_provenance
+        schema_version: 1
+    cacheable: true
+    verifier: verify_fit_outputs
+    invalidation_rules:
+      - Invalidate when templates, fit setup, background model, smoothing policy, or systematics relevant to the fit change.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: expensive
+    failure_handling: mark_candidate_invalid
+
+  - stage_id: systematics_build
+    name: Systematics Artifact Build
+    purpose: Build declared systematic-uncertainty artifacts.
+    service_id: fit_builder
+    command: hgg-systematics --summary {summary}
+    depends_on:
+      - sample_registry
+      - summary_normalization
+    config_dependencies:
+      - systematics
+      - sample_registry
+    inputs:
+      - artifact_type: sample_registry
+        schema_version: 1
+      - artifact_type: normalized_summary
+        schema_version: 1
+    outputs:
+      - artifact_type: systematics
+        schema_version: 1
+    cacheable: true
+    verifier: verify_systematics
+    invalidation_rules:
+      - Invalidate when systematic mode, entries, or sample registry changes.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: fast
+    failure_handling: requires_human_review_if_final_claim
+
+  - stage_id: significance
+    name: Significance Calculation
+    purpose: Compute expected significance and observed significance only when allowed.
+    service_id: significance_calculator
+    command: analysis.stats.significance.run_significance
+    depends_on:
+      - fit_construction
+      - systematics_build
+    config_dependencies:
+      - blinding
+      - fit_setup
+      - significance
+      - statistical_policy
+    inputs:
+      - artifact_type: fit_results
+        schema_version: 1
+      - artifact_type: fit_provenance
+        schema_version: 1
+    outputs:
+      - artifact_type: significance_asimov
+        schema_version: 1
+      - artifact_type: significance_observed_or_blocked
+        schema_version: 1
+    cacheable: true
+    verifier: verify_significance
+    invalidation_rules:
+      - Invalidate when fit outputs, blinding policy, significance backend, or statistical policy changes.
+      - Reject ordinary optimization configs that attempt observed-data unblinding.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: medium
+    failure_handling: mark_candidate_invalid
+
+  - stage_id: plotting
+    name: Blinded Plotting
+    purpose: Generate blinded analysis plots and plot manifests.
+    service_id: plot_report_builder
+    command: analysis.plotting.blinded_regions.generate_plots
+    depends_on:
+      - event_processing
+      - cutflow_yields
+      - fit_construction
+      - significance
+    config_dependencies:
+      - plotting
+      - blinding
+    inputs:
+      - artifact_type: processed_samples
+        schema_version: 1
+      - artifact_type: fit_results
+        schema_version: 1
+      - artifact_type: cutflow_table
+        schema_version: 1
+    outputs:
+      - artifact_type: plot_manifest
+        schema_version: 1
+    cacheable: true
+    verifier: verify_plots
+    invalidation_rules:
+      - Invalidate when plotting config, blinding display policy, processed samples, cutflow, or fit outputs change.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: medium
+    failure_handling: mark_candidate_invalid
+
+  - stage_id: review_artifacts
+    name: Review And Validation Artifacts
+    purpose: Write reviewer-facing checks and validation artifacts.
+    service_id: plot_report_builder
+    command: analysis.report.artifacts review bundle
+    depends_on:
+      - plotting
+      - significance
+      - sample_registry
+    config_dependencies:
+      - validation
+      - reporting
+    inputs:
+      - artifact_type: plot_manifest
+        schema_version: 1
+      - artifact_type: significance_asimov
+        schema_version: 1
+      - artifact_type: sample_registry
+        schema_version: 1
+    outputs:
+      - artifact_type: verification_status
+        schema_version: 1
+      - artifact_type: review_artifacts
+        schema_version: 1
+    cacheable: true
+    verifier: verify_review_artifacts
+    invalidation_rules:
+      - Invalidate when any reviewed upstream artifact changes.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: fast
+    failure_handling: mark_candidate_invalid
+
+  - stage_id: report_generation
+    name: Report Generation
+    purpose: Build final report and handoff artifacts.
+    service_id: plot_report_builder
+    command: analysis.report.make_report.build_report
+    depends_on:
+      - review_artifacts
+      - cutflow_yields
+      - significance
+    config_dependencies:
+      - reporting
+    inputs:
+      - artifact_type: verification_status
+        schema_version: 1
+      - artifact_type: cutflow_table
+        schema_version: 1
+      - artifact_type: significance_asimov
+        schema_version: 1
+    outputs:
+      - artifact_type: report
+        schema_version: 1
+      - artifact_type: handoff_bundle
+        schema_version: 1
+    cacheable: true
+    verifier: verify_report_bundle
+    invalidation_rules:
+      - Invalidate when report config or any required report input changes.
+    provenance_required:
+      - config_snapshot
+      - service_version
+      - git_state
+      - input_artifact_hashes
+    expected_runtime_class: fast
+    failure_handling: warn_and_mark_incomplete

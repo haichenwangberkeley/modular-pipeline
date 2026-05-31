@@ -1,0 +1,53 @@
+schema_id: optimization_scan_spec
+version: 0.1.0
+required_fields:
+  - scan_id
+  - parent_run_id
+  - strategy_id
+  - objective_metric
+  - parameters
+  - execution
+  - reporting
+
+fields:
+  scan_id:
+    type: string
+  parent_run_id:
+    type: string
+  branch_id:
+    type: string
+    required: false
+  strategy_id:
+    type: string
+  objective_metric:
+    type: string
+  parameters:
+    type: list
+    item_required_fields:
+      - config_path
+      - values
+  execution:
+    type: mapping
+    fields:
+      max_parallel_jobs:
+        type: integer
+      reuse_valid_artifacts:
+        type: boolean
+      stop_on_verifier_failure:
+        type: boolean
+      dry_run_only:
+        type: boolean
+  reporting:
+    type: mapping
+    fields:
+      summarize_cut_flow_changes:
+        type: boolean
+      summarize_yield_changes:
+        type: boolean
+      summarize_metric_changes:
+        type: boolean
+
+rules:
+  - Scan specs create immutable candidate configuration snapshots.
+  - Scan tools must call the planner before executing or recording a candidate.
+  - A scan spec is not permission to alter physics-policy invariants.

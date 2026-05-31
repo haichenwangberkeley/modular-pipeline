@@ -1,0 +1,90 @@
+schema_id: optimization_artifact_manifest
+version: 0.1.0
+description: Required fields for reusable optimization artifacts.
+
+required_fields:
+  - artifact_id
+  - artifact_type
+  - producing_run_id
+  - producing_stage_id
+  - created_at
+  - path
+  - content_hash
+  - schema_version
+  - service_id
+  - service_version
+  - git
+  - config_subset
+  - config_subset_hash
+  - upstream_artifact_hashes
+  - verifier_status
+  - reusable
+
+fields:
+  artifact_id:
+    type: string
+    description: Stable unique identifier for this artifact instance.
+  artifact_type:
+    type: string
+    description: Logical artifact type, matching workflow graph outputs where possible.
+  producing_run_id:
+    type: string
+    description: Run that produced the artifact.
+  producing_stage_id:
+    type: string
+    description: Stage that produced the artifact.
+  created_at:
+    type: datetime
+    description: Creation timestamp in ISO 8601 format.
+  path:
+    type: string
+    description: Absolute or run-relative path to the artifact.
+  content_hash:
+    type: string
+    description: Hash or checksum of artifact content.
+  schema_version:
+    type: string_or_integer
+    description: Artifact schema version.
+  service_id:
+    type: string
+    description: Producing executable-service ID.
+  service_version:
+    type: string
+    description: Producing service version.
+  git:
+    type: mapping
+    required_fields:
+      - commit
+      - dirty
+    description: Git commit and dirty-tree state for the producing code.
+  config_subset:
+    type: mapping
+    description: Exact configuration subset that affects this artifact.
+  config_subset_hash:
+    type: string
+    description: Stable hash of `config_subset`.
+  upstream_artifact_hashes:
+    type: mapping
+    description: Mapping of upstream artifact ID or type to content hash.
+  verifier_status:
+    type: string
+    allowed_values:
+      - pass
+      - fail
+      - warning
+      - not_run
+  reusable:
+    type: boolean
+    description: Whether the artifact may be considered for reuse.
+  invalidation_reason:
+    type: string_or_null
+    required: false
+  human_notes:
+    type: string_or_null
+    required: false
+
+compatibility_rules:
+  - Missing required provenance fields make the artifact non-reusable.
+  - "`verifier_status` must be `pass` for automatic reuse."
+  - Schema version must match the workflow graph requirement unless a compatibility adapter is declared.
+  - Service version must be compatible according to the executable-services ledger.
