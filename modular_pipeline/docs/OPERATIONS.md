@@ -9,32 +9,32 @@ pipeline.  It is not a replacement for the physics implementation in
 Run from the repository root:
 
 ```bash
-cd /global/homes/h/haichen/disk/opendataanalysis/fix-stat-interpretation/pipeline-for-testing
-export PYTHONPATH=$PWD
+cd modular-pipeline
+pip install -e '.[dev]'
 ```
 
-Use `.rootenv/bin/python` for pipeline runs because PyROOT/RooFit are required:
+Use a Python environment where `import ROOT` succeeds for full RooFit stages:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli list-components --verbose
+modular-pipeline list-components --verbose
 ```
 
 ## Full Run
 
 ```bash
 out="outputs_modular_full_$(date -u +%Y%m%dT%H%M%SZ)"
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+modular-pipeline run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs "$out"
 ```
 
 The full run writes the same classes of outputs as:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m analysis.cli run \
+hgg-analysis run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs <out>
 ```
 
@@ -52,7 +52,7 @@ points that are plausibly available from disk.
 ## Component Listing
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli list-components --verbose
+modular-pipeline list-components --verbose
 ```
 
 This prints each component, its groups, required context keys, provided context
@@ -63,7 +63,7 @@ keys, and description.
 Before starting from the middle of a workflow, inspect the old output directory:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
+modular-pipeline inspect \
   --outputs outputs_modular_full_20260531T163358Z \
   --write-state
 ```
@@ -71,7 +71,7 @@ PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
 For the full JSON view:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
+modular-pipeline inspect \
   --outputs outputs_modular_full_20260531T163358Z \
   --json
 ```
@@ -97,9 +97,9 @@ Use `--strict-mask` when you want the runner to fail rather than skip a
 component whose dependencies were removed by a mask:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+modular-pipeline run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs outputs_strict_no_samples \
   --mask samples \
   --strict-mask

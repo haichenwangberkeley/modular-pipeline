@@ -4,9 +4,12 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+.rootenv/
 build/
 dist/
 *.egg-info/
+input/
+input-data/
 outputs*/
 reports/
-
+.cache/

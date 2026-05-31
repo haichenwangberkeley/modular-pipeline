@@ -16,21 +16,21 @@ sharing the canonical implementation.
 Run commands from the repository root:
 
 ```bash
-cd /global/homes/h/haichen/disk/opendataanalysis/fix-stat-interpretation/pipeline-for-testing
-export PYTHONPATH=$PWD
+cd modular-pipeline
+pip install -e '.[dev]'
 ```
 
-Use the project ROOT environment:
+Use a Python environment where `import ROOT` succeeds for full pipeline runs:
 
 ```bash
-.rootenv/bin/python -m modular_pipeline.cli list-components --verbose
+modular-pipeline list-components --verbose
 ```
 
-For tests, use the shell Python with `PYTHONPATH=$PWD` unless a ROOT-only probe
-is needed:
+For tests, use the installed editable package unless a ROOT-only probe is
+needed:
 
 ```bash
-PYTHONPATH=$PWD pytest -q
+pytest -q
 ```
 
 ## Key Files
@@ -38,7 +38,7 @@ PYTHONPATH=$PWD pytest -q
 - `components.py`: component registry, dependency checks, masks, and manifest writing.
 - `cli.py`: command line interface.
 - `README.md`: short user-facing command examples.
-- `docs/`: operational notes for agents.
+- `docs/`: operational notes for agents, including `PORTABILITY.md` for fresh-machine setup.
 - `<outputs>/modular_pipeline_manifest.json`: record of what ran, what was masked, and what was dependency-skipped.
 - `<outputs>/modular_pipeline_state.json`: incremental artifact ledger and entrypoint-readiness map.
 
@@ -92,7 +92,7 @@ This state artifact answers:
 Inspect an old output directory before deciding where to enter:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
+modular-pipeline inspect \
   --outputs outputs_modular_full_20260531T163358Z \
   --write-state
 ```
@@ -102,18 +102,18 @@ PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
 Start from the beginning with no mask:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+modular-pipeline run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs outputs_modular_full
 ```
 
 Start with a reduced workflow by masking components or groups:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+modular-pipeline run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs outputs_modular_no_plots \
   --mask plots,report
 ```
@@ -165,13 +165,13 @@ The local statistical setup only matched after these conditions were enforced:
 Run:
 
 ```bash
-PYTHONPATH=$PWD pytest -q
+pytest -q
 ```
 
 For an unmasked reproduction run, compare:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python - <<'PY'
+python - <<'PY'
 import json
 from pathlib import Path
 

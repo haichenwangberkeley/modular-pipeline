@@ -5,13 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "modular-pipeline"
 version = "0.1.0"
-description = "Maskable orchestration and artifact-readiness tracking for the Hgg analysis pipeline"
+description = "Self-contained modular Hgg analysis pipeline with maskable orchestration and artifact-readiness tracking"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
   { name = "haichenwangberkeley", email = "haichenwang@berkeley.edu" },
 ]
-dependencies = []
+dependencies = [
+  "awkward>=2",
+  "matplotlib>=3.8",
+  "numpy>=1.26",
+  "PyYAML>=6",
+  "scipy>=1.11",
+  "uproot>=5",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -20,13 +27,27 @@ dev = [
 
 [project.scripts]
 modular-pipeline = "modular_pipeline.cli:main"
+hgg-analysis = "analysis.cli:main"
+hgg-preflight = "analysis.preflight:main"
+hgg-load-summary = "analysis.config.load_summary:main"
+hgg-sample-metadata = "analysis.samples.metadata:main"
+hgg-sample-registry = "analysis.samples.registry:main"
+hgg-selection-partition = "analysis.selections.partitioning:main"
+hgg-histmaker = "analysis.hists.histmaker:main"
+hgg-fit = "analysis.stats.fit:main"
+hgg-systematics = "analysis.stats.systematics:main"
+hgg-smoothing-study = "analysis.ad_hoc_smoothing_method_study:main"
+hgg-hhxyy-fit-plots = "analysis.plotting.hhxyy_fit_plots:main"
 
 [tool.setuptools]
 include-package-data = true
-packages = ["modular_pipeline"]
+
+[tool.setuptools.packages.find]
+include = ["analysis*", "modular_pipeline*"]
 
 [tool.setuptools.package-data]
 modular_pipeline = ["*.md", "docs/*.md"]
+analysis = ["*.json", "*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

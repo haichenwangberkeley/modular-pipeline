@@ -6,7 +6,7 @@ the same stage functions in the same order.
 For iterative work, first inspect the candidate output directory:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
+modular-pipeline inspect \
   --outputs <outputs> \
   --write-state
 ```
@@ -15,6 +15,10 @@ The resulting `modular_pipeline_state.json` tells an agent what has already
 been produced and which entry points are ready from artifacts.
 
 ## Validated Reference
+
+These are historical output-directory names from the original validation
+workspace. They are not bundled in the Git repository because generated outputs
+are large and machine-specific.
 
 Reference output:
 
@@ -47,7 +51,7 @@ The checked outputs matched exactly for:
 ## Reproduce The Check
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python - <<'PY'
+python - <<'PY'
 import json
 from pathlib import Path
 

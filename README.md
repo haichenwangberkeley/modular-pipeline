@@ -1,58 +1,110 @@
 # Modular Pipeline
 
-Maskable orchestration and artifact-readiness tracking for the H to gamma gamma
-analysis pipeline.
+Self-contained modular H to gamma gamma analysis pipeline.
 
-This repository contains the `modular_pipeline` package extracted from the
-analysis workspace.  It is intentionally a thin orchestration layer: it calls
-the canonical stage functions from the host analysis package instead of
-reimplementing physics logic.
+This repository contains both:
 
-## Host Requirement
+- `analysis/`: the canonical analysis implementation, including sample reading,
+  selections, histogramming, RooFit modeling, significance, plotting, and reports
+- `modular_pipeline/`: a maskable orchestrator and artifact-readiness tracker
+  around the canonical analysis stages
 
-Run this package from an analysis checkout that provides the `analysis` Python
-package and the project ROOT environment.  In the original workspace this is:
+The dataset is intentionally external. A separate device can run the pipeline as
+long as it has the same dataset directory layout and a Python environment with
+PyROOT/RooFit for the statistical stages.
 
-```bash
-cd /global/homes/h/haichen/disk/opendataanalysis/fix-stat-interpretation/pipeline-for-testing
-export PYTHONPATH=$PWD
+## Dataset Layout
+
+Point `--inputs` at a directory containing:
+
+```text
+input-data/
+  data/
+    *.root
+  MC/
+    *.root
 ```
 
-Then the package can be run in-place or installed editable.
+The path does not need to be named `input`. Use the absolute path on the host
+device, for example `--inputs /data/atlas-open-data-hgg`.
 
-## Commands
+## Prerequisites
 
-List components:
+Installable Python dependencies are declared in `pyproject.toml`.
+
+Full pipeline execution also requires CERN ROOT with PyROOT and RooFit:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli list-components --verbose
+python -c "import ROOT; print(ROOT.gROOT.GetVersion())"
 ```
 
-Run the full modular pipeline:
+The runtime prefers a repo-local `.rootenv/bin/python` if present. If not, it
+uses the active Python interpreter, so a conda/micromamba environment with ROOT
+also works.
+
+The HHXYY/quickFit cross-check path is optional. If available, set:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+export HHXYY_REFERENCE_ROOT=/path/to/hhxyy
+export HHXYY_FITTING_ROOT=/path/to/hhxyy-codex/fitting
+export HHXYY_QUICKFIT_SETUP=/path/to/quickfit/setup.sh
+```
+
+Without those, the pipeline uses the local PyROOT fallback for the significance
+stage.
+
+## Install
+
+```bash
+git clone git@github.com:haichenwangberkeley/modular-pipeline.git
+cd modular-pipeline
+python -m venv .venv
+. .venv/bin/activate
+pip install -U pip
+pip install -e '.[dev]'
+```
+
+For full RooFit execution, use the environment where `import ROOT` succeeds
+instead of a plain virtualenv if needed.
+
+## Quick Checks
+
+```bash
+modular-pipeline list-components --verbose
+hgg-preflight \
   --summary analysis/analysis.summary.json \
-  --inputs input \
-  --outputs outputs_modular_full
+  --inputs /path/to/input-data \
+  --outputs outputs_preflight
+pytest -q
 ```
 
-Inspect an existing output directory:
+## Run
+
+Full modular pipeline:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
-  --outputs outputs_modular_full \
-  --write-state
+modular-pipeline run \
+  --summary analysis/analysis.summary.json \
+  --inputs /path/to/input-data \
+  --outputs outputs_modular_full
 ```
 
 Mask components or groups:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+modular-pipeline run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs outputs_modular_no_plots \
   --mask plots,report
+```
+
+Inspect an existing output directory:
+
+```bash
+modular-pipeline inspect \
+  --outputs outputs_modular_full \
+  --write-state
 ```
 
 ## Artifacts
@@ -64,7 +116,7 @@ Every modular run writes:
 <outputs>/modular_pipeline_state.json
 ```
 
-The manifest records what ran or was masked.  The state file records component
+The manifest records what ran or was masked. The state file records component
 artifact completeness, context hydration status, and which entry points are
 ready from existing artifacts.
 
@@ -76,15 +128,12 @@ Start with:
 - `modular_pipeline/docs/OPERATIONS.md`
 - `modular_pipeline/docs/RESUME_AND_MASKING.md`
 - `modular_pipeline/docs/REPRODUCTION.md`
+- `modular_pipeline/docs/PORTABILITY.md`
 - `modular_pipeline/docs/FIT_SIGNIFICANCE_NOTES.md`
 - `modular_pipeline/docs/TROUBLESHOOTING.md`
 
 ## Tests
 
-The focused tests can be run from a host analysis checkout where `analysis` is
-importable:
-
 ```bash
-PYTHONPATH=$PWD pytest -q tests/test_modular_pipeline.py
+pytest -q
 ```
-

@@ -41,7 +41,7 @@ check:
 Check:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python - <<'PY'
+python - <<'PY'
 from analysis.stats.hhxyy_fitting_backend import is_atlas_env_available
 print(is_atlas_env_available())
 PY
@@ -74,7 +74,7 @@ or add an explicit, reviewed hydration component.
 Run:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
+modular-pipeline inspect \
   --outputs <outputs>
 ```
 
@@ -99,7 +99,7 @@ find <outputs>/fit/FIT1 -maxdepth 2 -type f | sort
 ## Minimal Health Checks
 
 ```bash
-PYTHONPATH=$PWD pytest -q
+pytest -q
 
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli list-components --verbose
+modular-pipeline list-components --verbose
 ```

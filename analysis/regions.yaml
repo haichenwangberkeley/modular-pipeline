@@ -1,0 +1,86 @@
+categories:
+- category_id: two_jet_vbf_enriched
+  source_region_id: SR_2JET
+  selection_summary: At least two jets with |eta| < 4.5, dijet invariant mass m_jj
+    > 400 GeV, and pseudorapidity separation delta_eta_jj > 2.8.
+  fit_observable: m_gammagamma
+  region_type: signal
+- category_id: central_low_ptt
+  source_region_id: SR_CENTRAL_LOW_PTT
+  selection_summary: Two photons with |eta| < 0.75 and pTt < 60 GeV.
+  fit_observable: m_gammagamma
+  region_type: signal
+- category_id: central_high_ptt
+  source_region_id: SR_CENTRAL_HIGH_PTT
+  selection_summary: Two photons with |eta| < 0.75 and pTt >= 60 GeV.
+  fit_observable: m_gammagamma
+  region_type: signal
+- category_id: rest_low_ptt
+  source_region_id: SR_REST_LOW_PTT
+  selection_summary: Events not in central or 2-jet category with pTt < 60 GeV.
+  fit_observable: m_gammagamma
+  region_type: signal
+- category_id: rest_high_ptt
+  source_region_id: SR_REST_HIGH_PTT
+  selection_summary: Events not in central or 2-jet category with pTt >= 60 GeV.
+  fit_observable: m_gammagamma
+  region_type: signal
+runtime_defaults:
+  tree_name: analysis
+  target_lumi_fb: 36.1
+  central_mc_lumi_fb: 36.1
+  fit_mass_range_gev:
+  - 105.0
+  - 160.0
+  signal_window_gev:
+  - 120.0
+  - 130.0
+  sidebands_gev:
+  - - 105.0
+    - 120.0
+  - - 130.0
+    - 160.0
+  blinding:
+    plot_signal_window: true
+    observed_significance_allowed: false
+    fit_uses_observed_data: false
+  photon_selection:
+    pt_min_gev: 25.0
+    abs_eta_max: 2.37
+    eta_crack:
+    - 1.37
+    - 1.52
+    require_tight_id: true
+    require_tight_iso: true
+    leading_pt_over_mgg_min: 0.35
+    subleading_pt_over_mgg_min: 0.25
+  jet_selection:
+    pt_min_gev: 25.0
+    abs_eta_max: 4.5
+  histogramming:
+    mass_bin_width_gev: 1.0
+  background_model:
+    candidates:
+    - exponential
+    - bernstein2
+    - bernstein3
+    selection_metric: aic
+  smoothing_policy:
+    required: true
+    method: TH1::Smooth
+    scope: prompt_diphoton_nominal_templates
+  systematics:
+    mode: placeholder
+    entries:
+    - photon energy scale
+    - photon identification efficiency
+    - luminosity
+    - background modeling
+    - MC statistical uncertainty
+overlap_policy:
+  default_allow_overlap: false
+  declared_exceptions:
+  - control_region_id: CR_BKG_VALIDATION
+    signal_region_pattern: SR_*
+    allow_overlap: true
+    reason: validation control region is the sideband subset of the diphoton fit domain

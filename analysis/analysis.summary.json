@@ -1,0 +1,238 @@
+{
+  "analysis_metadata": {
+    "experiment": "ATLAS",
+    "paper_title": "Observation of a New Particle in the Search for the Standard Model Higgs Boson with the ATLAS Detector at the LHC",
+    "arxiv_id": "1207.7214",
+    "publication_year": 2012,
+    "analysis_name": "H_to_gammagamma_open_data_5cat",
+    "energy": "13 TeV",
+    "luminosity": "36.1 fb-1",
+    "notes": "Analysis design inspired by the ATLAS Higgs discovery diphoton analysis. Implemented on the ATLAS 13 TeV open data release (36.1 fb-1 central-luminosity policy). Converted/unconverted photon categorization removed due to missing variables in the open dataset."
+  },
+
+  "analysis_objectives": [
+    {
+      "objective_id": "OBJ1",
+      "type": "measurement",
+      "target_process": "pp -> H -> gamma gamma",
+      "parameter_of_interest": [
+        "signal_strength_mu"
+      ],
+      "description": "Measure the Higgs boson signal strength using a diphoton invariant-mass fit with five analysis categories.",
+      "special_considerations": "Simplified implementation of the original ATLAS discovery diphoton analysis adapted for the open data sample."
+    }
+  ],
+
+  "signal_signatures": [
+    {
+      "signature_id": "SIG1",
+      "signal_process": "pp -> H -> gamma gamma",
+      "decay_chain": "H -> gamma gamma",
+      "final_state_objects": [
+        "photon",
+        "photon",
+        "optional_jets"
+      ],
+      "analysis_channels": [
+        "central_low_ptt",
+        "central_high_ptt",
+        "rest_low_ptt",
+        "rest_high_ptt",
+        "two_jet_vbf_enriched"
+      ],
+      "key_observables": [
+        "m_gammagamma",
+        "pTt",
+        "m_jj",
+        "delta_eta_jj"
+      ],
+      "event_topology_description": "Two isolated photons forming a narrow resonance near 125 GeV in the diphoton invariant mass spectrum.",
+      "special_considerations": "Five-category scheme designed to preserve sensitivity while simplifying the original categorization."
+    }
+  ],
+
+  "background_processes": [
+    {
+      "background_id": "BKG1",
+      "process_name": "prompt diphoton production",
+      "category": "irreducible",
+      "estimation_method": "data_driven",
+      "special_treatment": "Background modeled with analytic functions fitted to the diphoton invariant mass spectrum in each category.",
+      "notes": "Dominant background."
+    },
+    {
+      "background_id": "BKG2",
+      "process_name": "gamma + jet",
+      "category": "reducible",
+      "estimation_method": "data_driven",
+      "special_treatment": "Jets misidentified as photons contribute to the smooth diphoton mass spectrum.",
+      "notes": "Subdominant reducible background."
+    },
+    {
+      "background_id": "BKG3",
+      "process_name": "jet + jet",
+      "category": "reducible",
+      "estimation_method": "data_driven",
+      "special_treatment": "Two jets misidentified as photons contribute to background.",
+      "notes": "Small contribution."
+    },
+    {
+      "background_id": "BKG4",
+      "process_name": "Drell-Yan Z->ee",
+      "category": "reducible",
+      "estimation_method": "data_driven",
+      "special_treatment": "Electrons reconstructed as photons contribute to diphoton candidates.",
+      "notes": "Minor background source."
+    }
+  ],
+
+  "signal_regions": [
+    {
+      "signal_region_id": "SR_2JET",
+      "associated_signature_ids": [
+        "SIG1"
+      ],
+      "selection_summary": "At least two jets with |eta| < 4.5, dijet invariant mass m_jj > 400 GeV, and pseudorapidity separation delta_eta_jj > 2.8.",
+      "fit_observable": "m_gammagamma",
+      "binning": "unbinned",
+      "optimization_strategy": "Topology-based categorization to enhance VBF sensitivity.",
+      "purpose": "VBF-enriched signal region.",
+      "special_considerations": "Events assigned here are removed from the other categories."
+    },
+    {
+      "signal_region_id": "SR_CENTRAL_LOW_PTT",
+      "associated_signature_ids": [
+        "SIG1"
+      ],
+      "selection_summary": "Two photons with |eta| < 0.75 and pTt < 60 GeV.",
+      "fit_observable": "m_gammagamma",
+      "binning": "unbinned",
+      "optimization_strategy": "High-resolution category exploiting central photons.",
+      "purpose": "Maximize signal-to-background ratio.",
+      "special_considerations": "Converted and unconverted photon categories merged."
+    },
+    {
+      "signal_region_id": "SR_CENTRAL_HIGH_PTT",
+      "associated_signature_ids": [
+        "SIG1"
+      ],
+      "selection_summary": "Two photons with |eta| < 0.75 and pTt >= 60 GeV.",
+      "fit_observable": "m_gammagamma",
+      "binning": "unbinned",
+      "optimization_strategy": "Boosted Higgs topology.",
+      "purpose": "Enhance sensitivity to VH and VBF-like production.",
+      "special_considerations": "Converted and unconverted photon categories merged."
+    },
+    {
+      "signal_region_id": "SR_REST_LOW_PTT",
+      "associated_signature_ids": [
+        "SIG1"
+      ],
+      "selection_summary": "Events not in central or 2-jet category with pTt < 60 GeV.",
+      "fit_observable": "m_gammagamma",
+      "binning": "unbinned",
+      "optimization_strategy": "Inclusive category for remaining events.",
+      "purpose": "Capture additional signal events.",
+      "special_considerations": "Converted and unconverted photon categories merged."
+    },
+    {
+      "signal_region_id": "SR_REST_HIGH_PTT",
+      "associated_signature_ids": [
+        "SIG1"
+      ],
+      "selection_summary": "Events not in central or 2-jet category with pTt >= 60 GeV.",
+      "fit_observable": "m_gammagamma",
+      "binning": "unbinned",
+      "optimization_strategy": "Boosted inclusive category.",
+      "purpose": "Capture boosted Higgs events.",
+      "special_considerations": "Converted and unconverted photon categories merged."
+    }
+  ],
+
+  "control_regions": [
+    {
+      "control_region_id": "CR_BKG_VALIDATION",
+      "target_backgrounds": [
+        "BKG1",
+        "BKG2",
+        "BKG3",
+        "BKG4"
+      ],
+      "selection_summary": "Control samples used to validate background modeling and photon identification performance.",
+      "fit_observable": "m_gammagamma",
+      "role_in_fit": "validation",
+      "justification": "Used to verify the smooth background parameterization used in the signal fit.",
+      "special_considerations": "not_specified"
+    }
+  ],
+
+  "fit_setup": [
+    {
+      "fit_id": "FIT1",
+      "fit_purpose": "Extract Higgs signal strength from diphoton invariant mass distribution.",
+      "regions_included": [
+        "SR_2JET",
+        "SR_CENTRAL_LOW_PTT",
+        "SR_CENTRAL_HIGH_PTT",
+        "SR_REST_LOW_PTT",
+        "SR_REST_HIGH_PTT"
+      ],
+      "parameters_of_interest": [
+        "signal_strength_mu"
+      ],
+      "nuisance_parameter_types": [
+        "experimental",
+        "theoretical",
+        "background_normalization"
+      ],
+      "fit_strategy": "simultaneous",
+      "differences_between_fit_versions": "Original ATLAS discovery analysis used ten categories including photon conversion information; this implementation uses five categories due to limited variables in open data.",
+      "special_considerations": "Background modeled with analytic functions fitted to data."
+    }
+  ],
+
+  "results": [
+    {
+      "result_id": "RES1",
+      "associated_fit_id": "FIT1",
+      "result_type": "measurement",
+      "parameter_reported": "signal_strength_mu",
+      "numerical_result": "not_specified",
+      "confidence_level": "not_specified",
+      "dominant_uncertainties": "photon energy scale, photon identification efficiency, background model uncertainty",
+      "notes": "Expected to observe Higgs resonance near 125 GeV."
+    }
+  ],
+
+  "analysis_design_insights": [
+    {
+      "design_feature": "five-category structure",
+      "description": "Categories based on photon eta topology, diphoton pTt, and VBF jet topology.",
+      "reason_for_use": "Maintain sensitivity while simplifying the discovery analysis categorization.",
+      "special_considerations": "Conversion variables unavailable in open data."
+    },
+    {
+      "design_feature": "VBF-enriched category",
+      "description": "Dedicated dijet topology region.",
+      "reason_for_use": "Enhances sensitivity to VBF Higgs production.",
+      "special_considerations": "Exclusive category."
+    },
+    {
+      "design_feature": "data-driven background modeling",
+      "description": "Smooth analytic background fit to diphoton mass distribution.",
+      "reason_for_use": "Robust modeling of continuum diphoton background.",
+      "special_considerations": "Standard approach for resonance searches."
+    }
+  ],
+
+  "retrieval_features": {
+    "topology_class": "resonance",
+    "main_discriminant_type": "mass",
+    "region_strategy": "categorized",
+    "sensitivity_drivers": {
+      "dominant_signal_feature": "narrow diphoton mass peak",
+      "dominant_background_rejection_feature": "photon identification and isolation",
+      "main_limiting_systematics": "photon energy scale and background modeling"
+    }
+  }
+}

@@ -42,7 +42,7 @@ Every run writes:
 You can also generate or refresh it for an old output directory:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
+modular-pipeline inspect \
   --outputs <outputs> \
   --write-state
 ```
@@ -62,9 +62,9 @@ implemented.
 Use no mask:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+modular-pipeline run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs outputs_modular_full
 ```
 
@@ -76,9 +76,9 @@ upstream context in the same process.
 For example, run through fit/significance but skip plots and reports:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+modular-pipeline run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs outputs_modular_stats_only \
   --mask plots,review_artifacts,report
 ```

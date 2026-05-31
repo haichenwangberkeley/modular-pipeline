@@ -12,30 +12,31 @@ Agent-facing operating notes live in:
 - `docs/OPERATIONS.md`
 - `docs/RESUME_AND_MASKING.md`
 - `docs/REPRODUCTION.md`
+- `docs/PORTABILITY.md`
 - `docs/FIT_SIGNIFICANCE_NOTES.md`
 - `docs/TROUBLESHOOTING.md`
 
 List available components:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli list-components --verbose
+modular-pipeline list-components --verbose
 ```
 
 Run the full pipeline:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+modular-pipeline run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs outputs_modular_full
 ```
 
 Mask one or more components:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli run \
+modular-pipeline run \
   --summary analysis/analysis.summary.json \
-  --inputs input \
+  --inputs /path/to/input-data \
   --outputs outputs_modular_no_plots \
   --mask plots,report
 ```
@@ -58,7 +59,7 @@ points are ready from existing artifacts.
 Inspect an existing output directory:
 
 ```bash
-PYTHONPATH=$PWD .rootenv/bin/python -m modular_pipeline.cli inspect \
+modular-pipeline inspect \
   --outputs outputs_modular_full_20260531T163358Z \
   --write-state
 ```
