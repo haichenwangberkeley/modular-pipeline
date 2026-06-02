@@ -215,6 +215,7 @@ The BDT-specific outputs are:
 - `classifiers/<BDT>.json`: XGBoost-native model artifact.
 - `classifiers/<BDT>_manifest.json`: feature list, backend parameters, hashes, and model paths.
 - `bdt_boundary_optimization.json/.md`: score-boundary scan result or a precise blocked status.
+- `metadata/runs.jsonl` and `metadata/runs/<run_id>/observations.yaml`: output-local run metadata written by default when BDT preparation, training, or scoring is enabled.
 
 The implementation uses XGBoost with fixed seed `20260601`. Training weights are normalized in two stages. First, each component is normalized to its expected contribution in the `123-127 GeV` peak window. Continuum backgrounds use the full `105-160 GeV` mass range with an exponential-transfer estimate where possible and a `1/11` fallback otherwise. Second, total signal and background training weights are balanced inside each BDT. Raw weighted yields are still preserved in the audit.
 

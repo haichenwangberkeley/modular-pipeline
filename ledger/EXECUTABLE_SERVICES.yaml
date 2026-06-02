@@ -325,6 +325,10 @@ services:
       compatibility_review_required: true
     notes:
       - Section 8 nominal and BDT-training-candidate paths share an internal observable builder.
+      - Section 8 BDT metadata defaults to output-local `<outputs>/metadata/runs/` and `<outputs>/metadata/runs.jsonl`; central registries require explicit override paths.
+      - Historical run-registry rows are immutable provenance records and path audits classify them rather than rewriting original paths.
+      - `tools/compare_section8_outputs.py` is the bounded comparator for reference/candidate Section 8 output checks.
+      - The draft observable/category/model schemas remain non-authoritative, and the generic category router is not implemented.
       - Needs additional direct unit tests for weighting, object selection, and histogram schemas beyond the Section 8 seam tests.
 
   - service_id: fit_builder

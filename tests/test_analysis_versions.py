@@ -29,7 +29,8 @@ def test_round2_version_exposes_section8_categories_and_artifacts() -> None:
     assert categories[:5] == ["tH_lep_0fwd", "tH_lep_1fwd", "ttH_lep", "ttH_had_BDT1", "ttH_had_BDT2"]
     assert "ads_path" not in cfg["section8_ads"]
     assert "bdt_artifacts_dir" not in cfg["section8_ads"]
-    assert cfg["section8_ads"]["required_external_inputs"] == ["ads_path", "bdt_artifacts_dir"]
+    assert cfg["section8_ads"]["standalone_required_external_inputs"] == ["ads_path"]
+    assert cfg["section8_ads"]["modular_adapter_required_external_inputs"] == ["bdt_artifacts_dir"]
     assert "Section 8 ADS first-match" in selection_summary_for_category(categories[0], cfg)
 
 

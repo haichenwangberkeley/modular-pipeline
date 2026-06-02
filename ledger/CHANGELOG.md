@@ -29,6 +29,38 @@ Author: Codex
 Service ID: event_processor_histogram_builder
 Old Version: 0.1.0
 New Version: 0.1.0
+Change Class: Class B: Backward-compatible repair
+Summary: Repaired the Section 8 observable-seam checkpoint by restoring immutable historical run provenance, moving generated BDT metadata defaults under the selected output directory, clarifying standalone versus modular external-input requirements, expanding observable-overlap tests, and adding a bounded Section 8 output comparator.
+Motivation: Make the first observable-materialization checkpoint safe to merge without changing physics behavior, category routing, BDT features, cuts, split logic, normalization, blinding, model parameters, or statistical behavior.
+Files Changed:
+
+- `analysis/analysis_versions.json`
+- `analysis/section8_ads/pipeline.py`
+- `analysis/section8_ads/modular_adapter.py`
+- `analysis/section8_ads/BDT_TRAINING_NOTES.md`
+- `analysis/section8_ads/SECTION8_BDT_OPTIMIZATION.md`
+- `docs/OBSERVABLE_LAYER_REFACTOR_PLAN.md`
+- `tools/compare_section8_outputs.py`
+- `tests/test_analysis_versions.py`
+- `tests/test_compare_section8_outputs.py`
+- `tests/test_section8_ads_observables.py`
+- `ledger/GLOBAL_INVARIANTS.yaml`
+- `ledger/EXECUTABLE_SERVICES.yaml`
+- `ledger/CHANGELOG.md`
+- `optimization_infra/runs.jsonl`
+
+Tests Run: `python -m py_compile analysis/section8_ads/observables.py analysis/section8_ads/pipeline.py tools/compare_section8_outputs.py tests/test_section8_ads_observables.py`; `pytest -q tests/test_analysis_versions.py`; `pytest -q tests/test_section8_ads_observables.py`; `pytest -q tests/test_section8_ads_categories.py`; `pytest -q tests/test_section8_ads_bdt_training.py`; `pytest -q tests/test_section8_ads_loader.py`; `pytest -q tests/test_section8_ads_branch_map.py`; `pytest -q tests/test_section8_process_cutflow.py`; `pytest -q tests/test_compare_section8_outputs.py`; `pytest -q` (`47 passed`).
+Baseline Configurations Tested: Synthetic unit fixtures only unless a real-data parity run is explicitly reported.
+Backward-Compatibility Assessment: Existing CLI entrypoints, category routing, BDT training mechanics, tri-state assignment, output field names, and draft-schema non-authoritative status are preserved. Normal Section 8 BDT runs now write metadata beneath `<outputs>/metadata/` by default; central registry writes require explicit override paths.
+Affected Consumers: Section 8 ADS pipeline, modular Section 8 adapter, future optimization agents, provenance auditors.
+Migration Note: Historical rows in `optimization_infra/runs.jsonl` preserve original values. Path audits classify those rows as historical provenance rather than rewriting them.
+Approval Status: No physics-policy approval required; no physics semantics changed.
+
+Date: 2026-06-02
+Author: Codex
+Service ID: event_processor_histogram_builder
+Old Version: 0.1.0
+New Version: 0.1.0
 Change Class: Class B: Backward-compatible service extension
 Summary: Added an internal shared Section 8 observable builder and removed host-specific Section 8 paths from active analysis-version configuration and BDT metadata-writing logic.
 Motivation: Create the first stable observable-materialization seam for future configuration-driven routing while preserving current physics semantics and portability.

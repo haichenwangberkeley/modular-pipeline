@@ -567,9 +567,8 @@ def _write_bdt_optimization_metadata(
 ) -> None:
     if not (prepare_bdt_training or train_bdts or score_bdts):
         return
-    repo_root = Path(__file__).resolve().parents[2]
-    runs_dir = repo_root / "runs" if runs_dir is None else Path(runs_dir)
-    registry_path = repo_root / "optimization_infra" / "runs.jsonl" if registry_path is None else Path(registry_path)
+    runs_dir = outputs / "metadata" / "runs" if runs_dir is None else Path(runs_dir)
+    registry_path = outputs / "metadata" / "runs.jsonl" if registry_path is None else Path(registry_path)
     run_id = f"section8_bdt_{stable_hash({'outputs': str(outputs), 'time': utcnow_iso()})[:12]}"
     sample_hash = stable_hash(
         [
@@ -821,8 +820,8 @@ def main() -> None:
     parser.add_argument("--optimize-boundaries", action="store_true")
     parser.add_argument("--reuse-bdt-artifacts", type=Path)
     parser.add_argument("--trigger-policy", choices=["input_preselected", "trigP", "none"], default="input_preselected")
-    parser.add_argument("--metadata-runs-dir", type=Path, help="Directory for Section 8 BDT run observation records; defaults to repo-local runs/.")
-    parser.add_argument("--metadata-registry", type=Path, help="JSONL registry path for Section 8 BDT run records; defaults to repo-local optimization_infra/runs.jsonl.")
+    parser.add_argument("--metadata-runs-dir", type=Path, help="Directory for Section 8 BDT run observation records; defaults to <outputs>/metadata/runs/.")
+    parser.add_argument("--metadata-registry", type=Path, help="JSONL registry path for Section 8 BDT run records; defaults to <outputs>/metadata/runs.jsonl.")
     args = parser.parse_args()
     run_section8_ads(
         ads_path=Path(args.ads),

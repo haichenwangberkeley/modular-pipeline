@@ -45,9 +45,11 @@ For a quick validation pass, add `--max-events N`. Do not interpret BDT performa
 3. Rebuild the BDT training sample audit.
 4. Train and score BDTs.
 5. Compare training rows, peak-window normalization factors, mass-correlation warnings, AUC metrics, BDT score distributions, category migration, blocked categories, and expected-significance proxy.
-6. Record the run in `optimization_infra/runs.jsonl` and preserve `runs/<run_id>/observations.yaml`.
+6. Preserve the generated run metadata. The default location is output-local: `<outputs>/metadata/runs.jsonl` and `<outputs>/metadata/runs/<run_id>/observations.yaml`.
 
 Stop and escalate if a model trains with suspiciously high AUC, if any classifier has missing signal or background, or if category migration improves the proxy metric while producing unstable or empty physics categories.
+
+Use `--metadata-registry` and `--metadata-runs-dir` only when intentionally appending to a central campaign registry. Historical rows already committed in `optimization_infra/runs.jsonl` are immutable provenance records and should not be rewritten to remove original machine-specific paths.
 
 ## Background Normalization
 

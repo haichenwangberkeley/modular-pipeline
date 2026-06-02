@@ -10,6 +10,20 @@ The repository has two layers. `analysis/` is the canonical executable implement
 
 The default analysis is the five-category `pTt`/VBF-enriched path in `analysis/hists/histmaker.py` and `analysis/selections/engine.py`. The Section 8 analysis version switches sample processing through `analysis/section8_ads/modular_adapter.py`, which calls `analysis/section8_ads/pipeline.py`, materializes Section 8 arrays, scores supplemental BDTs if artifacts are available, and then routes events through `analysis/section8_ads/categories.py`.
 
+## Execution Contracts
+
+There are two Section 8 execution routes with different external-input contracts:
+
+- The standalone `hgg-section8` / `python -m analysis.section8_ads.pipeline` runner requires `--ads /path/to/atlas_hgg_36fb_section8_ads.json` and may optionally reuse BDT artifacts.
+- The modular Section 8 adapter consumes already trained BDT artifacts through `runtime_defaults.section8_ads.bdt_artifacts_dir`; it does not consume `ads_path` directly during modular scoring/categorization.
+
+Generated Section 8 BDT metadata defaults to output-local paths:
+
+- `<outputs>/metadata/runs/<run_id>/observations.yaml`
+- `<outputs>/metadata/runs.jsonl`
+
+Callers that intentionally maintain a central campaign registry may still supply `--metadata-runs-dir` and `--metadata-registry`. Existing historical registry rows are immutable provenance records; path audits should classify host-specific historical values instead of rewriting them.
+
 ## Current Fusion
 
 Event extraction, object building, observable calculation, BDT scoring, category assignment, and histogram production are currently fused in two places:
@@ -47,6 +61,8 @@ This is deliberately not a generic DSL. It preserves the existing masks, approxi
 
 Future producers should have explicit inputs, output columns, version/hash metadata, approximation status, and invalidation rules. Candidate producer kinds are input branch, expression, Python plugin, and learned score.
 
+The draft schema examples under `configs/schema_drafts/` remain non-authoritative examples. They are not production runtime configuration and are not consumed by the current Section 8 runner or modular adapter.
+
 ## Training vs Score Materialization
 
 Model training creates reusable artifacts: model files, feature manifests, training-audit hashes, backend versions, hyperparameters, and normalization diagnostics. Score materialization is a later inference step that consumes a compatible model artifact and writes an event-level score column such as `BDT_ttH`.
@@ -62,6 +78,8 @@ The future category router should consume a table of event observables and an or
 - blocked because an earlier eligible category requires a missing classifier or derived input.
 
 The router must also preserve category ordering, missing-input blocking, and diagnostic reasons. The current `analysis/section8_ads/categories.py` remains the behavior reference until compatibility tests approve a generic router.
+
+The generic category router has not been implemented in this checkpoint.
 
 ## Future Stage Graph
 
@@ -100,6 +118,10 @@ report_generation
 5. Build a generic category-router prototype behind tests that replay the current five-category and Section 8 outputs.
 6. Promote only after side-by-side tests prove unchanged category labels, blocked states, cutflows, templates, and BDT diagnostics.
 7. Move optimization scans to edit validated config files, with artifact reuse decided by declared invalidation rules.
+
+## Checkpoint Validation
+
+The synthetic overlap tests now compare every shared nominal/candidate observable field on overlapping event identifiers, while explicitly documenting the BDT-candidate path's placeholder lepton-veto fields. `tools/compare_section8_outputs.py` provides a bounded parity-check utility for reference and candidate Section 8 outputs, comparing event-level NPZ artifacts plus `cutflow_baseline.json` and `category_yields.json` when present. No real-data parity claim is made unless that tool is run against real pre-refactor and post-refactor outputs under comparable conditions.
 
 ## Risks And Compatibility
 

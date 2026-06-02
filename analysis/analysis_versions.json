@@ -16,8 +16,10 @@
       "trigger_policy": "input_preselected",
       "boundary_mode": "optimized",
       "category_id_style": "sanitized_label",
-      "required_external_inputs": [
-        "ads_path",
+      "standalone_required_external_inputs": [
+        "ads_path"
+      ],
+      "modular_adapter_required_external_inputs": [
         "bdt_artifacts_dir"
       ]
     }

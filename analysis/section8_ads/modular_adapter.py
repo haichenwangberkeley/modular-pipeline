@@ -55,7 +55,10 @@ def process_sample_for_modular(
 ) -> dict[str, Any]:
     section8_cfg = cfg.get("section8_ads", {})
     if "bdt_artifacts_dir" not in section8_cfg:
-        raise RuntimeError("Section 8 modular processing requires runtime_defaults.section8_ads.bdt_artifacts_dir")
+        raise RuntimeError(
+            "Section 8 modular adapter processing requires runtime_defaults.section8_ads.bdt_artifacts_dir "
+            "for classifier scoring and categorization; the standalone hgg-section8 runner requires --ads separately."
+        )
     artifact_dir = Path(section8_cfg["bdt_artifacts_dir"])
     training_report_path = artifact_dir / "classifier_training_report.json"
     if not training_report_path.exists():
