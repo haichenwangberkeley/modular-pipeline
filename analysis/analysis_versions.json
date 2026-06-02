@@ -3,6 +3,7 @@
     "analysis_implementation": {
       "version": "round1_5cat",
       "selection": "five_category_ptt",
+      "routing_config": "configs/routing/five_category_ptt.yaml",
       "description": "Original five-category pTt/VBF-enriched open-data pipeline."
     }
   },
@@ -10,6 +11,7 @@
     "analysis_implementation": {
       "version": "round2_section8_bdt",
       "selection": "section8_ads_bdt",
+      "routing_config": "configs/routing/section8_ads_bdt.yaml",
       "description": "Section 8 ADS 31-category pipeline with supplemental XGBoost BDTs trained from anti-ID/anti-isolation controls."
     },
     "section8_ads": {

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import numpy as np
+
+from analysis.routing.config import load_routing_config
+from analysis.routing.router import route_categories
 
 
 ORDERED_CATEGORIES = [
@@ -65,7 +69,7 @@ def _blocked_if_missing(values: dict[str, np.ndarray], required: list[str]) -> n
     return blocked
 
 
-def assign_categories(values: dict[str, np.ndarray], boundaries: dict[str, list[float]] | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def legacy_assign_categories(values: dict[str, np.ndarray], boundaries: dict[str, list[float]] | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     boundaries = boundaries or {
         "BDT_ttH": [0.52, 0.79, 0.83, 0.92],
         "BDT_VH": [0.35, 0.78],
@@ -168,3 +172,76 @@ def assign_categories(values: dict[str, np.ndarray], boundaries: dict[str, list[
     reasons[final_blocked] = np.where(reasons[final_blocked] == "", "blocked by missing classifier or derived input", reasons[final_blocked])
     reasons[(assigned == "unassigned") & active] = "no category matched after full priority scan"
     return assigned.astype(str), reasons.astype(str), blocked.astype(bool)
+
+
+def _replace_select_when(config, category_id: str, select_when: dict[str, Any]) -> None:
+    for category in config.categories:
+        if category.id == category_id:
+            category.select_when.clear()
+            category.select_when.update(copy.deepcopy(select_when))
+            return
+    raise KeyError(f"Unknown Section 8 routing category id: {category_id}")
+
+
+def _section8_routing_config(boundaries: dict[str, list[float]] | None = None, routing_config: str | None = None):
+    config = copy.deepcopy(load_routing_config(routing_config or "configs/routing/section8_ads_bdt.yaml"))
+    if boundaries is None:
+        return config
+    tth_edges = boundaries["BDT_ttH"]
+    vh_edges = boundaries["BDT_VH"]
+    vbf_high = boundaries["BDT_VBF_high"]
+    vbf_low = boundaries["BDT_VBF_low"]
+    _replace_select_when(config, "ttH_had_BDT1", {"all": [{"field": "BDT_ttH", "op": ">", "value": tth_edges[3]}]})
+    _replace_select_when(
+        config,
+        "ttH_had_BDT2",
+        {"all": [{"field": "BDT_ttH", "op": ">", "value": tth_edges[2]}, {"field": "BDT_ttH", "op": "<=", "value": tth_edges[3]}]},
+    )
+    _replace_select_when(
+        config,
+        "ttH_had_BDT3",
+        {"all": [{"field": "BDT_ttH", "op": ">", "value": tth_edges[1]}, {"field": "BDT_ttH", "op": "<=", "value": tth_edges[2]}]},
+    )
+    _replace_select_when(
+        config,
+        "ttH_had_BDT4",
+        {"all": [{"field": "BDT_ttH", "op": ">", "value": tth_edges[0]}, {"field": "BDT_ttH", "op": "<=", "value": tth_edges[1]}]},
+    )
+    _replace_select_when(config, "VH_had_tight", {"all": [{"field": "BDT_VH", "op": ">", "value": vh_edges[1]}]})
+    _replace_select_when(
+        config,
+        "VH_had_loose",
+        {"all": [{"field": "BDT_VH", "op": ">", "value": vh_edges[0]}, {"field": "BDT_VH", "op": "<=", "value": vh_edges[1]}]},
+    )
+    _replace_select_when(config, "VBF_tight_high_pT_Hjj", {"all": [{"field": "BDT_VBF", "op": ">", "value": vbf_high[1]}]})
+    _replace_select_when(
+        config,
+        "VBF_loose_high_pT_Hjj",
+        {"all": [{"field": "BDT_VBF", "op": ">", "value": vbf_high[0]}, {"field": "BDT_VBF", "op": "<=", "value": vbf_high[1]}]},
+    )
+    _replace_select_when(config, "VBF_tight_low_pT_Hjj", {"all": [{"field": "BDT_VBF", "op": ">", "value": vbf_low[1]}]})
+    _replace_select_when(
+        config,
+        "VBF_loose_low_pT_Hjj",
+        {"all": [{"field": "BDT_VBF", "op": ">", "value": vbf_low[0]}, {"field": "BDT_VBF", "op": "<=", "value": vbf_low[1]}]},
+    )
+    return config
+
+
+def route_section8_categories(values: dict[str, np.ndarray], boundaries: dict[str, list[float]] | None = None, routing_config: str | None = None):
+    config = _section8_routing_config(boundaries, routing_config)
+    return route_categories(values, config)
+
+
+def assign_categories(values: dict[str, np.ndarray], boundaries: dict[str, list[float]] | None = None, routing_config: str | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    config = _section8_routing_config(boundaries, routing_config)
+    result = route_categories(values, config)
+    label_by_id = config.label_by_id
+    assigned = np.asarray(
+        [
+            label_by_id.get(category, category)
+            for category in result.assigned_category
+        ],
+        dtype=str,
+    )
+    return assigned, result.assignment_reason, result.assignment_blocked

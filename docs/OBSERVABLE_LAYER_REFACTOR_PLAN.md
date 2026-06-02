@@ -79,7 +79,7 @@ The future category router should consume a table of event observables and an or
 
 The router must also preserve category ordering, missing-input blocking, and diagnostic reasons. The current `analysis/section8_ads/categories.py` remains the behavior reference until compatibility tests approve a generic router.
 
-The generic category router has not been implemented in this checkpoint.
+The generic category router is implemented in the follow-on `codex/config-category-router` branch and remains covered by parity tests against the legacy Python routers.
 
 ## Future Stage Graph
 

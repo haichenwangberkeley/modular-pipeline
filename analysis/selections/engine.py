@@ -4,6 +4,9 @@ import re
 
 import numpy as np
 
+from analysis.routing.config import load_routing_config, parse_routing_config, routing_config_path_from_runtime
+from analysis.routing.router import route_categories
+
 
 DEFAULT_CATEGORY_ORDER = [
     "two_jet_vbf_enriched",
@@ -13,6 +16,7 @@ DEFAULT_CATEGORY_ORDER = [
     "rest_high_ptt",
 ]
 CATEGORY_ORDER = DEFAULT_CATEGORY_ORDER
+DEFAULT_FIVE_CATEGORY_ROUTING_CONFIG = "configs/routing/five_category_ptt.yaml"
 
 
 def selection_implementation(cfg: dict | None = None) -> str:
@@ -59,23 +63,114 @@ def _ptt_boundaries(cfg: dict | None) -> dict[str, list[float]]:
     }
 
 
-def category_order(cfg: dict | None = None) -> list[str]:
-    if selection_implementation(cfg) == "section8_ads_bdt":
-        from analysis.section8_ads.categories import ORDERED_CATEGORIES
-
-        return [section8_category_id(label) for label in ORDERED_CATEGORIES]
-    boundaries = _ptt_boundaries(cfg)
-    order = ["two_jet_vbf_enriched"]
+def _five_category_payload(boundaries: dict[str, list[float]]) -> dict:
+    categories = [
+        {
+            "id": "two_jet_vbf_enriched",
+            "label": "Two-jet VBF enriched",
+            "priority": 10,
+            "required_inputs": ["n_jets", "mjj", "delta_eta_jj"],
+            "select_when": {
+                "all": [
+                    {"field": "n_jets", "op": ">=", "value": 2},
+                    {"field": "mjj", "op": ">", "value": 400.0},
+                    {"field": "delta_eta_jj", "op": ">", "value": 2.8},
+                ]
+            },
+            "reason": "at least two jets with high dijet mass and rapidity separation",
+        }
+    ]
+    priority = 20
     for family in ("central", "rest"):
         family_boundaries = boundaries[family]
-        if len(family_boundaries) <= 1:
-            order.extend([f"{family}_low_ptt", f"{family}_high_ptt"])
-            continue
-        order.append(f"{family}_low_ptt")
+        if family == "central":
+            family_predicate = {
+                "all": [
+                    {"field": "lead_eta_abs", "op": "<", "value": 0.75},
+                    {"field": "sublead_eta_abs", "op": "<", "value": 0.75},
+                ]
+            }
+            topology = "central photons"
+        else:
+            family_predicate = {
+                "any": [
+                    {"field": "lead_eta_abs", "op": ">=", "value": 0.75},
+                    {"field": "sublead_eta_abs", "op": ">=", "value": 0.75},
+                ]
+            }
+            topology = "non-central photons"
+        categories.append(
+            {
+                "id": f"{family}_low_ptt",
+                "label": f"{family} low pTt",
+                "priority": priority,
+                "required_inputs": ["lead_eta_abs", "sublead_eta_abs", "ptt"],
+                "eligible_when": family_predicate,
+                "select_when": {"all": [{"field": "ptt", "op": "<", "value": family_boundaries[0]}]},
+                "reason": f"{topology} with low pTt",
+            }
+        )
+        priority += 10
         for idx in range(1, len(family_boundaries)):
-            order.append(f"{family}_mid{idx}_ptt")
-        order.append(f"{family}_high_ptt")
-    return order
+            categories.append(
+                {
+                    "id": f"{family}_mid{idx}_ptt",
+                    "label": f"{family} mid {idx} pTt",
+                    "priority": priority,
+                    "required_inputs": ["lead_eta_abs", "sublead_eta_abs", "ptt"],
+                    "eligible_when": family_predicate,
+                    "select_when": {
+                        "all": [
+                            {"field": "ptt", "op": ">=", "value": family_boundaries[idx - 1]},
+                            {"field": "ptt", "op": "<", "value": family_boundaries[idx]},
+                        ]
+                    },
+                    "reason": f"{topology} with intermediate pTt",
+                }
+            )
+            priority += 10
+        categories.append(
+            {
+                "id": f"{family}_high_ptt",
+                "label": f"{family} high pTt",
+                "priority": priority,
+                "required_inputs": ["lead_eta_abs", "sublead_eta_abs", "ptt"],
+                "eligible_when": family_predicate,
+                "select_when": {"all": [{"field": "ptt", "op": ">=", "value": family_boundaries[-1]}]},
+                "reason": f"{topology} with high pTt",
+            }
+        )
+        priority += 10
+    return {"routing": {"mode": "ordered_first_match"}, "categories": categories}
+
+
+def _five_category_routing_config(cfg: dict | None):
+    boundaries = _ptt_boundaries(cfg)
+    return parse_routing_config(_five_category_payload(boundaries))
+
+
+def _load_runtime_routing_config(cfg: dict | None):
+    if cfg is None:
+        return _five_category_routing_config(cfg)
+    routing_path = cfg.get("analysis_implementation", {}).get("routing_config")
+    boundaries = _ptt_boundaries(cfg)
+    default_boundaries = {"central": [60.0], "rest": [60.0]}
+    if not routing_path:
+        return _five_category_routing_config(cfg)
+    if str(routing_path) == DEFAULT_FIVE_CATEGORY_ROUTING_CONFIG and boundaries != default_boundaries:
+        return _five_category_routing_config(cfg)
+    return load_routing_config(routing_config_path_from_runtime(cfg))
+
+
+def category_order(cfg: dict | None = None) -> list[str]:
+    if selection_implementation(cfg) == "section8_ads_bdt":
+        try:
+            return load_routing_config(routing_config_path_from_runtime(cfg)).category_ids
+        except Exception:
+            from analysis.section8_ads.categories import ORDERED_CATEGORIES
+
+            return [section8_category_id(label) for label in ORDERED_CATEGORIES]
+    return _load_runtime_routing_config(cfg).category_ids
 
 
 def region_id_for_category(category: str) -> str:
@@ -111,7 +206,7 @@ def selection_summary_for_category(category: str, cfg: dict | None = None) -> st
     return f"{topology}."
 
 
-def assign_categories(features: dict, cfg: dict | None = None) -> np.ndarray:
+def legacy_assign_categories(features: dict, cfg: dict | None = None) -> np.ndarray:
     n = len(features["diphoton_mass"])
     categories = np.full(n, "unassigned", dtype=object)
     two_jet = (features["n_jets"] >= 2) & (features["mjj"] > 400.0) & (features["delta_eta_jj"] > 2.8)
@@ -130,6 +225,15 @@ def assign_categories(features: dict, cfg: dict | None = None) -> np.ndarray:
         high_mask = family_mask & (features["ptt"] >= family_boundaries[-1])
         categories[high_mask] = f"{family}_high_ptt"
     return categories
+
+
+def assign_categories(features: dict, cfg: dict | None = None) -> np.ndarray:
+    routing_features = dict(features)
+    if "lead_eta_abs" not in routing_features and "lead_eta" in routing_features:
+        routing_features["lead_eta_abs"] = np.abs(routing_features["lead_eta"])
+    if "sublead_eta_abs" not in routing_features and "sublead_eta" in routing_features:
+        routing_features["sublead_eta_abs"] = np.abs(routing_features["sublead_eta"])
+    return route_categories(routing_features, _load_runtime_routing_config(cfg)).assigned_category
 
 
 def sideband_mask(mass: np.ndarray) -> np.ndarray:

@@ -30,6 +30,7 @@ def apply_analysis_version(
     version_registry: Path | None = None,
     section8_ads_path: Path | None = None,
     section8_bdt_artifacts: Path | None = None,
+    routing_config: Path | None = None,
 ) -> dict[str, Any]:
     runtime = dict(runtime_defaults)
     if version_name:
@@ -44,4 +45,8 @@ def apply_analysis_version(
         if section8_bdt_artifacts is not None:
             section8["bdt_artifacts_dir"] = str(section8_bdt_artifacts)
         runtime["section8_ads"] = section8
+    if routing_config is not None:
+        implementation = dict(runtime.get("analysis_implementation", {}))
+        implementation["routing_config"] = str(routing_config)
+        runtime["analysis_implementation"] = implementation
     return runtime

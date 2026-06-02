@@ -106,6 +106,17 @@ interface_invariants:
       - modular-pipeline/analysis/section8_ads/observables.py
       - modular-pipeline/tests/test_section8_ads_observables.py
     ordinary_optimization_may_change: false
+  - id: int_config_backed_category_router
+    rule: >
+      Ordinary category-strategy changes should be expressed in validated
+      routing configs, while legacy Python routers remain reference-only
+      parity checks until a later compatibility migration removes them.
+    source_evidence:
+      - modular-pipeline/analysis/routing/router.py
+      - modular-pipeline/configs/routing/five_category_ptt.yaml
+      - modular-pipeline/configs/routing/section8_ads_bdt.yaml
+      - modular-pipeline/tests/test_config_router_parity.py
+    ordinary_optimization_may_change: false
 
 provenance_invariants:
   - id: prov_config_snapshot

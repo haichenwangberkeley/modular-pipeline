@@ -29,6 +29,42 @@ Author: Codex
 Service ID: event_processor_histogram_builder
 Old Version: 0.1.0
 New Version: 0.1.0
+Change Class: Class B: Backward-compatible service extension
+Summary: Added a validated config-backed ordered category router for five-category and Section 8 mixed cut/BDT categorization, plus authoritative production routing configs and a lightweight NPZ rerouting command.
+Motivation: Enable ordinary category-strategy and boundary scans by editing routing configuration rather than Python while preserving existing physics semantics and category priority behavior.
+Files Changed:
+
+- `analysis/routing/*`
+- `analysis/selections/engine.py`
+- `analysis/section8_ads/categories.py`
+- `analysis/section8_ads/modular_adapter.py`
+- `analysis/config/load_summary.py`
+- `analysis/config/versions.py`
+- `analysis/analysis_versions.json`
+- `configs/routing/*.yaml`
+- `configs/routing/examples/mixed_strategy_demo.yaml`
+- `docs/CONFIG_DRIVEN_CATEGORY_ROUTING.md`
+- `docs/OBSERVABLE_LAYER_REFACTOR_PLAN.md`
+- `tests/test_config_driven_category_optimization.py`
+- `tests/test_config_router_parity.py`
+- `tests/test_routing_config_validation.py`
+- `tests/test_analysis_versions.py`
+- `ledger/GLOBAL_INVARIANTS.yaml`
+- `ledger/EXECUTABLE_SERVICES.yaml`
+- `ledger/CHANGELOG.md`
+
+Tests Run: `python -m py_compile analysis/routing/__init__.py analysis/routing/config.py analysis/routing/router.py analysis/routing/predicates.py`; `pytest -q tests/test_config_driven_category_optimization.py` (`2 passed`); `pytest -q tests/test_routing_config_validation.py` (`8 passed`); `pytest -q tests/test_config_router_parity.py` (`2 passed`); `pytest -q tests/test_analysis_versions.py` (`4 passed`); `pytest -q tests/test_section8_ads_categories.py` (`2 passed`); `pytest -q tests/test_section8_ads_observables.py` (`3 passed`); `pytest -q` (`60 passed`).
+Baseline Configurations Tested: Synthetic parity fixtures for five-category and Section 8 routing; no full-data run.
+Backward-Compatibility Assessment: Runtime category assignment now uses the generic router through authoritative configs. Legacy Python routers remain available for parity tests. Category IDs, ordering, thresholds, missing-score blocking, BDT training/scoring, object definitions, blinding, and statistical behavior are preserved.
+Affected Consumers: Five-category histogram builder, Section 8 ADS pipeline, modular Section 8 adapter, future optimization agents.
+Migration Note: Use `analysis_implementation.routing_config` or `apply_analysis_version(..., routing_config=...)` to test category strategies without Python edits.
+Approval Status: No physics-policy approval required; this is a compatibility-preserving routing implementation.
+
+Date: 2026-06-02
+Author: Codex
+Service ID: event_processor_histogram_builder
+Old Version: 0.1.0
+New Version: 0.1.0
 Change Class: Class B: Backward-compatible repair
 Summary: Repaired the Section 8 observable-seam checkpoint by restoring immutable historical run provenance, moving generated BDT metadata defaults under the selected output directory, clarifying standalone versus modular external-input requirements, expanding observable-overlap tests, and adding a bounded Section 8 output comparator.
 Motivation: Make the first observable-materialization checkpoint safe to merge without changing physics behavior, category routing, BDT features, cuts, split logic, normalization, blinding, model parameters, or statistical behavior.
