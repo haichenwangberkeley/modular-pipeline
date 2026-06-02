@@ -26,6 +26,9 @@ This file lists decisions that should be made by a human before future agents pe
 - `summary_normalizer`: validate and materialize effective config.
 - `sample_registry`: sample discovery, classification, nominal/alternative policy, normalization table.
 - `event_processor_histogram_builder`: object building, selections, event weights, cutflows, templates.
+- `observable_materializer`: future validated producer graph for input branches, expressions, Python plugins, and learned-score columns. The current Section 8 shared builder is only an internal compatibility seam.
+- `category_router`: future generic ordered first-match router. It must prove compatibility with five-category routing and Section 8 assigned/unassigned/blocked tri-state behavior before promotion.
+- `learned_observable_service`: future model-training and score-materialization interface for BDT and NN score columns. It must keep model artifacts versioned separately from score columns.
 - `fit_builder`: RooFit workspace/model construction and measurement fits.
 - `significance_calculator`: expected and observed significance with blinding enforcement.
 - `background_selector_bridge`: optional official HHXYY background-selector integration.

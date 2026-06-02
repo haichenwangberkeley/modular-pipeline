@@ -1,0 +1,58 @@
+schema_draft: models
+status: non_authoritative_example
+version: 0.0.1
+models:
+  - model_id: models.BDT_ttH.v1
+    observable_name: BDT_ttH
+    backend: xgboost
+    artifact_kind: classifier
+    training:
+      version: 1
+      random_seed: 20260601
+      features:
+        - H_T
+        - m_all_jets
+        - N_jets_30
+        - N_central_jets_25
+        - N_btag_25
+      labels:
+        signal_processes:
+          - tth
+        background_processes:
+          - ggh
+          - data_control
+      split_policy: deterministic_hash_sample_id_event_number
+      hyperparameters:
+        n_estimators: 300
+        max_depth: 3
+        learning_rate: 0.05
+        subsample: 0.7
+        colsample_bytree: 0.8
+        reg_lambda: 1.0
+    scoring:
+      output_observable: BDT_ttH
+      required_inputs:
+        - H_T
+        - m_all_jets
+        - N_jets_30
+        - N_central_jets_25
+        - N_btag_25
+      missing_input_policy: produce_nan
+invalidation:
+  training_feature_change:
+    invalidates:
+      - model_training
+      - model_scoring
+      - category_assignment
+      - template_production
+  hyperparameter_change:
+    invalidates:
+      - model_training
+      - model_scoring
+      - category_assignment
+      - template_production
+  scoring_code_change:
+    invalidates:
+      - model_scoring
+      - category_assignment
+      - template_production

@@ -262,6 +262,9 @@ services:
       - modular-pipeline/analysis/objects/jets.py
       - modular-pipeline/analysis/selections/engine.py
       - modular-pipeline/analysis/hists/histmaker.py
+      - modular-pipeline/analysis/section8_ads/observables.py
+      - modular-pipeline/analysis/section8_ads/pipeline.py
+      - modular-pipeline/analysis/section8_ads/modular_adapter.py
     interface_type: cli_and_python
     inputs:
       - name: registry
@@ -299,13 +302,18 @@ services:
       - Blinded signal-window flags must retain their declared meaning.
     extension_points:
       - Add derived features.
+      - Add validated observable producers for input branches, expressions, Python plugins, and learned-score columns.
       - Add histogram definitions through configuration after schema support.
       - Add cache fields without removing existing fields.
     backward_compatibility:
       guarantee: Existing output-field meanings and cache keys must remain valid unless migrated.
-      compatibility_tests: []
+      compatibility_tests:
+        - modular-pipeline/tests/test_section8_ads_observables.py
     verification:
-      tests: []
+      tests:
+        - modular-pipeline/tests/test_section8_ads_observables.py
+        - modular-pipeline/tests/test_section8_ads_categories.py
+        - modular-pipeline/tests/test_section8_ads_bdt_training.py
       required_artifacts:
         - hists/templates.json
         - hists/processed_samples.json
@@ -316,7 +324,12 @@ services:
       changelog_update_required: true
       compatibility_review_required: true
     notes:
-      - Needs direct unit tests for weighting, object selection, category assignment, and histogram schemas.
+      - Section 8 nominal and BDT-training-candidate paths share an internal observable builder.
+      - Section 8 BDT metadata defaults to output-local `<outputs>/metadata/runs/` and `<outputs>/metadata/runs.jsonl`; central registries require explicit override paths.
+      - Historical run-registry rows are immutable provenance records and path audits classify them rather than rewriting original paths.
+      - `tools/compare_section8_outputs.py` is the bounded comparator for reference/candidate Section 8 output checks.
+      - The draft observable/category/model schemas remain non-authoritative, and the generic category router is not implemented.
+      - Needs additional direct unit tests for weighting, object selection, and histogram schemas beyond the Section 8 seam tests.
 
   - service_id: fit_builder
     name: RooFit Fit Builder

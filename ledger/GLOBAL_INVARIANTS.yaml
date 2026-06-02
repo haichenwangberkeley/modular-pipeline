@@ -97,6 +97,15 @@ interface_invariants:
     source_evidence:
       - proposed_by_audit
     ordinary_optimization_may_change: false
+  - id: int_section8_observable_builder
+    rule: >
+      Section 8 nominal processing and BDT-training-candidate preparation
+      must share the same object-derived and event-derived observable
+      calculations unless a reviewed compatibility migration is approved.
+    source_evidence:
+      - modular-pipeline/analysis/section8_ads/observables.py
+      - modular-pipeline/tests/test_section8_ads_observables.py
+    ordinary_optimization_may_change: false
 
 provenance_invariants:
   - id: prov_config_snapshot
@@ -120,6 +129,18 @@ provenance_invariants:
     source_evidence:
       - modular-pipeline/analysis/samples/registry.py
       - outputs_modular_hgg_20260531T213216Z/samples.registry.json
+    ordinary_optimization_may_change: false
+  - id: prov_historical_registry_immutability
+    rule: Historical run-registry rows preserve the values written by the original run; audits classify host-specific historical paths rather than rewriting them.
+    source_evidence:
+      - modular-pipeline/optimization_infra/runs.jsonl
+      - modular-pipeline/ledger/CHANGELOG.md
+    ordinary_optimization_may_change: false
+  - id: prov_output_local_generated_metadata
+    rule: New Section 8 BDT metadata records are written under the selected output directory by default, with central registries requiring explicit override paths.
+    source_evidence:
+      - modular-pipeline/analysis/section8_ads/pipeline.py
+      - modular-pipeline/tests/test_section8_ads_observables.py
     ordinary_optimization_may_change: false
   - id: prov_comparable_conditions
     rule: Optimization comparisons must use comparable inputs, blinding state, runtime settings, and verification status.
