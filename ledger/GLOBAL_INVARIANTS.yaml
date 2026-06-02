@@ -97,6 +97,15 @@ interface_invariants:
     source_evidence:
       - proposed_by_audit
     ordinary_optimization_may_change: false
+  - id: int_section8_observable_builder
+    rule: >
+      Section 8 nominal processing and BDT-training-candidate preparation
+      must share the same object-derived and event-derived observable
+      calculations unless a reviewed compatibility migration is approved.
+    source_evidence:
+      - modular-pipeline/analysis/section8_ads/observables.py
+      - modular-pipeline/tests/test_section8_ads_observables.py
+    ordinary_optimization_may_change: false
 
 provenance_invariants:
   - id: prov_config_snapshot

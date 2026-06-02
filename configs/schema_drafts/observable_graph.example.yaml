@@ -1,0 +1,60 @@
+schema_draft: observable_graph
+status: non_authoritative_example
+version: 0.0.1
+observables:
+  - name: photon_pt
+    kind: input_branch
+    source_branch: photon_pt
+    dtype: jagged_float
+    required_inputs: []
+  - name: H_T
+    kind: expression
+    expression: sum(jet_pt_30)
+    dtype: float
+    required_inputs:
+      - jet_pt_30
+    invalidates:
+      - observable_materialization
+      - model_scoring
+      - category_assignment
+      - template_production
+  - name: VBF_centrality
+    kind: python_plugin
+    plugin: analysis.section8_ads.observables:compute_vbf_centrality
+    dtype: float
+    required_inputs:
+      - eta_gammagamma
+      - leading_jet_eta_30
+      - subleading_jet_eta_30
+    missing_input_policy: produce_nan
+  - name: BDT_ttH
+    kind: learned_score
+    model_ref: models.BDT_ttH.v1
+    dtype: float
+    required_inputs:
+      - H_T
+      - m_all_jets
+      - N_jets_30
+      - N_central_jets_25
+      - N_btag_25
+    missing_input_policy: produce_nan
+stage_invalidation:
+  branch_mapping:
+    invalidates:
+      - event_extraction
+      - object_building
+      - observable_materialization
+      - model_scoring
+      - category_assignment
+      - template_production
+  expression_change:
+    invalidates:
+      - observable_materialization
+      - model_scoring
+      - category_assignment
+      - template_production
+  learned_score_model_change:
+    invalidates:
+      - model_scoring
+      - category_assignment
+      - template_production

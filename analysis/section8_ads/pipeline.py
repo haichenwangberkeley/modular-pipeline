@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 from pathlib import Path
 from typing import Any, Callable
 
@@ -24,32 +23,19 @@ from analysis.section8_ads.classifiers import (
     train_classifiers,
     write_training_sample_audit,
 )
-
-
-FIT_RANGE = (105.0, 160.0)
-SIGNAL_WINDOW = (120.0, 130.0)
-SIDEBAND_SCALE = 10.0 / 45.0
-
-
-def _delta_phi(phi1: np.ndarray, phi2: np.ndarray) -> np.ndarray:
-    return np.arctan2(np.sin(phi1 - phi2), np.cos(phi1 - phi2))
-
-
-def _rapidities(energy: np.ndarray, pz: np.ndarray) -> np.ndarray:
-    denom = np.clip(energy - pz, 1e-6, None)
-    return 0.5 * np.log(np.clip((energy + pz) / denom, 1e-6, None))
-
-
-def _invariant_mass(px: np.ndarray, py: np.ndarray, pz: np.ndarray, energy: np.ndarray) -> np.ndarray:
-    mass2 = energy**2 - px**2 - py**2 - pz**2
-    return np.sqrt(np.clip(mass2, 0.0, None))
-
-
-def _vector_components(pt: np.ndarray, eta: np.ndarray, phi: np.ndarray, energy: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    px = pt * np.cos(phi)
-    py = pt * np.sin(phi)
-    pz = pt * np.sinh(eta)
-    return px, py, pz, energy
+from analysis.section8_ads.observables import (
+    FIT_RANGE,
+    SIDEBAND_SCALE,
+    SIGNAL_WINDOW,
+    SECTION8_REQUIRED_BRANCHES,
+    build_diphoton_event_view,
+    build_section8_observables,
+    delta_phi as _delta_phi,
+    invariant_mass as _invariant_mass,
+    photon_iso_proxy as _photon_iso_proxy,
+    rapidities as _rapidities,
+    vector_components as _vector_components,
+)
 
 
 def _select_samples(registry: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -178,56 +164,13 @@ def _append_chunk(store: dict[str, list[np.ndarray]], key: str, value: np.ndarra
     store[key].append(np.asarray(value))
 
 
-def _photon_iso_proxy(pt: ak.Array, topoetcone40: ak.Array, ptcone20: ak.Array) -> ak.Array:
-    # Approximate the published calorimeter/track isolation using the closest visible ntuple branches.
-    return (topoetcone40 <= 0.065 * pt) & (ptcone20 <= 0.05 * pt)
-
-
 def _process_sample(
     sample: dict[str, Any],
     max_events: int | None = None,
     event_selector: Callable[[ak.Array], np.ndarray] | None = None,
     trigger_policy: str = "input_preselected",
 ) -> dict[str, Any]:
-    branches = [
-        "eventNumber",
-        "runNumber",
-        "mcWeight",
-        "ScaleFactor_PILEUP",
-        "ScaleFactor_PHOTON",
-        "ScaleFactor_JVT",
-        "ScaleFactor_FTAG",
-        "trigP",
-        "photon_pt",
-        "photon_eta",
-        "photon_phi",
-        "photon_e",
-        "photon_isLooseID",
-        "photon_isTightID",
-        "photon_ptcone20",
-        "photon_topoetcone40",
-        "photon_isLooseIso",
-        "photon_isTightIso",
-        "jet_pt",
-        "jet_eta",
-        "jet_phi",
-        "jet_e",
-        "jet_jvt",
-        "jet_btag_quantile",
-        "lep_type",
-        "lep_pt",
-        "lep_eta",
-        "lep_phi",
-        "lep_e",
-        "lep_charge",
-        "lep_isMediumID",
-        "lep_isLooseIso",
-        "lep_isTightIso",
-        "lep_z0",
-        "lep_d0sig",
-        "met",
-        "met_phi",
-    ]
+    branches = SECTION8_REQUIRED_BRANCHES
     cutflow = {
         "all_input_events": {"before": 0, "after": 0, "status": "implemented_faithfully", "notes": ""},
         "trigger_requirement": {
@@ -262,86 +205,20 @@ def _process_sample(
     arrays = _empty_arrays()
 
     for batch in _iterate_batches(sample["files"], branches, max_events=max_events, event_selector=event_selector):
-        event_number = np.asarray(batch["eventNumber"], dtype=np.int64)
-        run_number = np.asarray(batch["runNumber"], dtype=np.int64)
         weights = _event_weights(batch, sample)
-        n_events = len(event_number)
-
+        n_events = len(batch["eventNumber"])
         trigger_mask = _trigger_mask(batch, n_events, trigger_policy)
-
-        abs_eta = abs(batch["photon_eta"])
-        kin_mask = (batch["photon_pt"] > 25.0) & (abs_eta < 2.37) & ~((abs_eta > 1.37) & (abs_eta < 1.52))
-        loose_mask = kin_mask & batch["photon_isLooseID"]
-        photons = ak.zip(
-            {
-                "pt": batch["photon_pt"][loose_mask],
-                "eta": batch["photon_eta"][loose_mask],
-                "phi": batch["photon_phi"][loose_mask],
-                "e": batch["photon_e"][loose_mask],
-                "tight_id": batch["photon_isTightID"][loose_mask],
-                "tight_iso": _photon_iso_proxy(
-                    batch["photon_pt"][loose_mask],
-                    batch["photon_topoetcone40"][loose_mask],
-                    batch["photon_ptcone20"][loose_mask],
-                ),
-            }
+        view = build_diphoton_event_view(batch, weights=weights, trigger_mask=trigger_mask)
+        baseline_mask = (
+            view.trigger_mask
+            & view.has_two
+            & view.full_tight
+            & view.full_iso
+            & view.full_ptfrac
+            & np.isfinite(view.full_mass)
+            & (view.full_mass > FIT_RANGE[0])
+            & (view.full_mass < FIT_RANGE[1])
         )
-        ordered = photons[ak.argsort(photons.pt, axis=1, ascending=False)]
-        loose_counts = ak.to_numpy(ak.num(ordered))
-        has_two = loose_counts >= 2
-        selected = ordered[has_two][:, :2]
-
-        full_tight = np.zeros(n_events, dtype=bool)
-        full_iso = np.zeros(n_events, dtype=bool)
-        full_ptfrac = np.zeros(n_events, dtype=bool)
-        full_mass = np.full(n_events, np.nan)
-        full_ptgg = np.full(n_events, np.nan)
-        full_etagg = np.full(n_events, np.nan)
-        full_ptt = np.full(n_events, np.nan)
-        full_lead_pt = np.full(n_events, np.nan)
-        full_sub_pt = np.full(n_events, np.nan)
-        full_lead_eta = np.full(n_events, np.nan)
-        full_sub_eta = np.full(n_events, np.nan)
-        full_abs_eta_max = np.full(n_events, np.nan)
-        sel_indices = np.where(has_two)[0]
-
-        if len(sel_indices):
-            lead = selected[:, 0]
-            sub = selected[:, 1]
-            lead_px, lead_py, lead_pz, lead_e = _vector_components(ak.to_numpy(lead.pt), ak.to_numpy(lead.eta), ak.to_numpy(lead.phi), ak.to_numpy(lead.e))
-            sub_px, sub_py, sub_pz, sub_e = _vector_components(ak.to_numpy(sub.pt), ak.to_numpy(sub.eta), ak.to_numpy(sub.phi), ak.to_numpy(sub.e))
-            dip_px = lead_px + sub_px
-            dip_py = lead_py + sub_py
-            dip_pz = lead_pz + sub_pz
-            dip_e = lead_e + sub_e
-            mass = _invariant_mass(dip_px, dip_py, dip_pz, dip_e)
-            ptt_x = lead_px - sub_px
-            ptt_y = lead_py - sub_py
-            ptt_norm = np.hypot(ptt_x, ptt_y)
-            ptt = np.divide(np.abs(dip_px * ptt_y - dip_py * ptt_x), ptt_norm, out=np.zeros_like(mass), where=ptt_norm > 0.0)
-            ptgg = np.hypot(dip_px, dip_py)
-            etagg = np.arcsinh(np.divide(dip_pz, np.clip(ptgg, 1e-6, None)))
-            lead_pt = ak.to_numpy(lead.pt)
-            sub_pt = ak.to_numpy(sub.pt)
-            lead_eta = ak.to_numpy(lead.eta)
-            sub_eta = ak.to_numpy(sub.eta)
-            tight_id = ak.to_numpy(lead.tight_id) & ak.to_numpy(sub.tight_id)
-            tight_iso = ak.to_numpy(lead.tight_iso) & ak.to_numpy(sub.tight_iso)
-            ptfrac = (lead_pt / np.clip(mass, 1e-6, None) > 0.35) & (sub_pt / np.clip(mass, 1e-6, None) > 0.25)
-            full_tight[sel_indices] = tight_id
-            full_iso[sel_indices] = tight_iso
-            full_ptfrac[sel_indices] = ptfrac
-            full_mass[sel_indices] = mass
-            full_ptgg[sel_indices] = ptgg
-            full_etagg[sel_indices] = etagg
-            full_ptt[sel_indices] = ptt
-            full_lead_pt[sel_indices] = lead_pt
-            full_sub_pt[sel_indices] = sub_pt
-            full_lead_eta[sel_indices] = lead_eta
-            full_sub_eta[sel_indices] = sub_eta
-            full_abs_eta_max[sel_indices] = np.maximum(np.abs(lead_eta), np.abs(sub_eta))
-
-        baseline_mask = trigger_mask & has_two & full_tight & full_iso & full_ptfrac & np.isfinite(full_mass) & (full_mass > FIT_RANGE[0]) & (full_mass < FIT_RANGE[1])
 
         def update_cutflow(name: str, before_mask: np.ndarray, after_mask: np.ndarray) -> None:
             cutflow[name]["before"] += int(np.sum(before_mask))
@@ -349,19 +226,17 @@ def _process_sample(
             cutflow[name]["weighted_before"] += float(np.sum(weights[before_mask]))
             cutflow[name]["weighted_after"] += float(np.sum(weights[after_mask]))
 
-        kin_counts = ak.to_numpy(ak.num(batch["photon_pt"][kin_mask]))
-        has_two_kinematic_photons = kin_counts >= 2
-        trigger_has_two = trigger_mask & has_two
-        et_fraction_mask = trigger_has_two & full_ptfrac
-        tight_id_mask = et_fraction_mask & full_tight
-        tight_iso_mask = tight_id_mask & full_iso
+        trigger_has_two = view.trigger_mask & view.has_two
+        et_fraction_mask = trigger_has_two & view.full_ptfrac
+        tight_id_mask = et_fraction_mask & view.full_tight
+        tight_iso_mask = tight_id_mask & view.full_iso
 
         all_events = np.ones(n_events, dtype=bool)
         update_cutflow("all_input_events", all_events, all_events)
-        update_cutflow("trigger_requirement", all_events, trigger_mask)
-        update_cutflow("at_least_two_photon_candidates", trigger_mask, trigger_has_two)
-        update_cutflow("photon_kinematic_acceptance", trigger_mask, trigger_mask & has_two_kinematic_photons)
-        update_cutflow("loose_photon_id_preselection", trigger_mask & has_two_kinematic_photons, trigger_has_two)
+        update_cutflow("trigger_requirement", all_events, view.trigger_mask)
+        update_cutflow("at_least_two_photon_candidates", view.trigger_mask, trigger_has_two)
+        update_cutflow("photon_kinematic_acceptance", view.trigger_mask, view.trigger_mask & view.has_two_kinematic_photons)
+        update_cutflow("loose_photon_id_preselection", view.trigger_mask & view.has_two_kinematic_photons, trigger_has_two)
         update_cutflow("select_two_highest_et_photons", trigger_has_two, trigger_has_two)
         update_cutflow("diphoton_primary_vertex_handling", trigger_has_two, trigger_has_two)
         update_cutflow("leading_photon_et_over_mgg", trigger_has_two, et_fraction_mask)
@@ -370,256 +245,9 @@ def _process_sample(
         update_cutflow("photon_isolation", tight_id_mask, tight_iso_mask)
         update_cutflow("diphoton_mass_window", tight_iso_mask, baseline_mask)
 
-        jets = ak.zip(
-            {
-                "pt": batch["jet_pt"],
-                "eta": batch["jet_eta"],
-                "phi": batch["jet_phi"],
-                "e": batch["jet_e"],
-                "jvt": batch["jet_jvt"],
-                "btag": batch["jet_btag_quantile"],
-            }
-        )
-        jets25 = jets[(jets.pt > 25.0) & (abs(jets.eta) < 4.4)]
-        jets30 = jets[(jets.pt > 30.0) & (abs(jets.eta) < 4.4)]
-        jvt_pass = (abs(jets.eta) >= 2.4) | (jets.pt >= 60.0) | (jets.jvt > 0.59)
-        jets25_jvt = jets[(jets.pt > 25.0) & (abs(jets.eta) < 4.4) & jvt_pass]
-        jets30_jvt = jets[(jets.pt > 30.0) & (abs(jets.eta) < 4.4) & jvt_pass]
-        leptons = ak.zip(
-            {
-                "type": batch["lep_type"],
-                "pt": batch["lep_pt"],
-                "eta": batch["lep_eta"],
-                "phi": batch["lep_phi"],
-                "e": batch["lep_e"],
-                "charge": batch["lep_charge"],
-                "medium_id": batch["lep_isMediumID"],
-                "loose_iso": batch["lep_isLooseIso"],
-                "tight_iso": batch["lep_isTightIso"],
-                "z0": batch["lep_z0"],
-                "d0sig": batch["lep_d0sig"],
-            }
-        )
-
-        baseline_indices = np.where(baseline_mask)[0]
-        if not len(baseline_indices):
+        if not np.any(baseline_mask):
             continue
-        baseline_selector = ak.Array(baseline_mask)
-        baseline_jets25 = jets25[baseline_selector]
-        baseline_jets30 = jets30[baseline_selector]
-        baseline_jets25_jvt = jets25_jvt[baseline_selector]
-        baseline_jets30_jvt = jets30_jvt[baseline_selector]
-        baseline_leptons = leptons[baseline_selector]
-
-        n_base = len(baseline_indices)
-        n_jets25 = ak.to_numpy(ak.num(baseline_jets25))
-        n_jets30 = ak.to_numpy(ak.num(baseline_jets30))
-        n_jets25_jvt = ak.to_numpy(ak.num(baseline_jets25_jvt))
-        n_jets30_jvt = ak.to_numpy(ak.num(baseline_jets30_jvt))
-        n_central25 = ak.to_numpy(ak.sum(abs(baseline_jets25.eta) < 2.5, axis=1))
-        n_forward25 = ak.to_numpy(ak.sum(abs(baseline_jets25.eta) >= 2.5, axis=1))
-        n_b25 = ak.to_numpy(ak.sum(baseline_jets25.btag >= 4, axis=1))
-
-        electron_mask = (
-            (baseline_leptons.type == 11)
-            & (baseline_leptons.pt > 10.0)
-            & (abs(baseline_leptons.eta) < 2.47)
-            & ~((abs(baseline_leptons.eta) > 1.37) & (abs(baseline_leptons.eta) < 1.52))
-            & baseline_leptons.medium_id
-            & baseline_leptons.loose_iso
-            & (abs(baseline_leptons.z0) < 0.5)
-            & (abs(baseline_leptons.d0sig) < 5.0)
-        )
-        muon_mask = (
-            (baseline_leptons.type == 13)
-            & (baseline_leptons.pt > 10.0)
-            & (abs(baseline_leptons.eta) < 2.7)
-            & baseline_leptons.medium_id
-            & baseline_leptons.loose_iso
-            & (abs(baseline_leptons.z0) < 0.5)
-            & (abs(baseline_leptons.d0sig) < 3.0)
-        )
-        selected_leptons = baseline_leptons[electron_mask | muon_mask]
-        n_lep = ak.to_numpy(ak.num(selected_leptons))
-
-        met = np.asarray(batch["met"], dtype=float)[baseline_mask]
-        met_phi = np.asarray(batch["met_phi"], dtype=float)[baseline_mask]
-        lead_eta = full_lead_eta[baseline_mask]
-        sub_eta = full_sub_eta[baseline_mask]
-        lead_pt = full_lead_pt[baseline_mask]
-        sub_pt = full_sub_pt[baseline_mask]
-        lead_phi = np.zeros(n_base)
-        sub_phi = np.zeros(n_base)
-        # We only need phi for derived angular variables used downstream.
-        selected_baseline = selected[baseline_mask[sel_indices]]
-        if len(selected_baseline):
-            lead_phi = ak.to_numpy(selected_baseline[:, 0].phi)
-            sub_phi = ak.to_numpy(selected_baseline[:, 1].phi)
-        lead_e = lead_pt * np.cosh(lead_eta)
-        sub_e = sub_pt * np.cosh(sub_eta)
-        lead_px, lead_py, lead_pz, _ = _vector_components(lead_pt, lead_eta, lead_phi, lead_e)
-        sub_px, sub_py, sub_pz, _ = _vector_components(sub_pt, sub_eta, sub_phi, sub_e)
-        dip_px = lead_px + sub_px
-        dip_py = lead_py + sub_py
-        dip_pz = lead_pz + sub_pz
-        dip_e = lead_e + sub_e
-        dip_y = _rapidities(dip_e, dip_pz)
-
-        leading_jet_pt30 = np.full(n_base, np.nan)
-        mjj30 = np.full(n_base, np.nan)
-        abs_deta30 = np.full(n_base, np.nan)
-        pthjj30 = np.full(n_base, np.nan)
-        dr_min_gamma_j = np.full(n_base, np.nan)
-        vbf_centrality = np.full(n_base, np.nan)
-        ht = ak.to_numpy(ak.sum(baseline_jets30.pt, axis=1))
-        m_all_jets = np.full(n_base, np.nan)
-        delta_y = np.full(n_base, np.nan)
-        cos_theta_star = np.full(n_base, np.nan)
-        abs_dphi_capped = np.full(n_base, np.nan)
-        training_mask_tth = (n_lep == 0) & (n_jets30 >= 3) & (n_b25 >= 1)
-        training_mask_vh = np.zeros(n_base, dtype=bool)
-        training_mask_vbf = np.zeros(n_base, dtype=bool)
-
-        if np.any(n_jets30 > 0):
-            leading_jet_pt30[n_jets30 > 0] = ak.to_numpy(baseline_jets30[n_jets30 > 0][:, 0].pt)
-
-        for idx in range(n_base):
-            jets30_evt = baseline_jets30[idx]
-            if len(jets30_evt):
-                px = ak.to_numpy(jets30_evt.pt * np.cos(jets30_evt.phi))
-                py = ak.to_numpy(jets30_evt.pt * np.sin(jets30_evt.phi))
-                pz = ak.to_numpy(jets30_evt.pt * np.sinh(jets30_evt.eta))
-                energy = ak.to_numpy(jets30_evt.e)
-                m_all_jets[idx] = float(_invariant_mass(np.sum(px), np.sum(py), np.sum(pz), np.sum(energy)))
-            if len(jets30_evt) >= 2:
-                j1 = jets30_evt[0]
-                j2 = jets30_evt[1]
-                j1_px, j1_py, j1_pz, _ = _vector_components(np.asarray([j1.pt]), np.asarray([j1.eta]), np.asarray([j1.phi]), np.asarray([j1.e]))
-                j2_px, j2_py, j2_pz, _ = _vector_components(np.asarray([j2.pt]), np.asarray([j2.eta]), np.asarray([j2.phi]), np.asarray([j2.e]))
-                dijet_px = j1_px[0] + j2_px[0]
-                dijet_py = j1_py[0] + j2_py[0]
-                dijet_pz = j1_pz[0] + j2_pz[0]
-                dijet_e = float(j1.e + j2.e)
-                mjj30[idx] = float(_invariant_mass(dijet_px, dijet_py, dijet_pz, dijet_e))
-                abs_deta30[idx] = abs(float(j1.eta - j2.eta))
-                pthjj30[idx] = float(np.hypot(dip_px[idx] + dijet_px, dip_py[idx] + dijet_py))
-                dijet_y = float(_rapidities(np.asarray([dijet_e]), np.asarray([dijet_pz]))[0])
-                delta_y[idx] = dijet_y - dip_y[idx]
-                vbf_centrality[idx] = abs(full_etagg[baseline_mask][idx] - 0.5 * (float(j1.eta) + float(j2.eta)))
-                dphi = abs(_delta_phi(np.asarray([math.atan2(dip_py[idx], dip_px[idx])]), np.asarray([math.atan2(dijet_py, dijet_px)]))[0])
-                abs_dphi_capped[idx] = min(dphi, 2.94)
-                drs = []
-                for photon_eta, photon_phi in ((lead_eta[idx], lead_phi[idx]), (sub_eta[idx], sub_phi[idx])):
-                    for jet_eta, jet_phi in ((float(j1.eta), float(j1.phi)), (float(j2.eta), float(j2.phi))):
-                        drs.append(float(np.hypot(photon_eta - jet_eta, _delta_phi(np.asarray([photon_phi]), np.asarray([jet_phi]))[0])))
-                dr_min_gamma_j[idx] = min(drs) if drs else np.nan
-                training_mask_vh[idx] = bool(60.0 < mjj30[idx] < 120.0)
-                training_mask_vbf[idx] = bool(abs_deta30[idx] > 2.0 and vbf_centrality[idx] < 5.0)
-                system_px = dip_px[idx] + dijet_px
-                system_py = dip_py[idx] + dijet_py
-                system_pz = dip_pz[idx] + dijet_pz
-                system_p = np.sqrt(system_px**2 + system_py**2 + system_pz**2)
-                dip_p = np.sqrt(dip_px[idx] ** 2 + dip_py[idx] ** 2 + dip_pz[idx] ** 2)
-                if system_p > 0.0 and dip_p > 0.0:
-                    cos_theta_star[idx] = (dip_px[idx] * system_px + dip_py[idx] * system_py + dip_pz[idx] * system_pz) / (dip_p * system_p)
-
-        met_sig = met / np.sqrt(np.clip(ht, 1.0, None))
-        mll = np.full(n_base, np.nan)
-        z_veto = np.ones(n_base, dtype=bool)
-        megamma_veto = np.ones(n_base, dtype=bool)
-        ptlepmet = np.full(n_base, np.nan)
-
-        for idx in range(n_base):
-            leptons_evt = selected_leptons[idx]
-            if len(leptons_evt):
-                lead_lep = leptons_evt[0]
-                lep_px = float(lead_lep.pt * np.cos(lead_lep.phi))
-                lep_py = float(lead_lep.pt * np.sin(lead_lep.phi))
-                ptlepmet[idx] = float(np.hypot(lep_px + met[idx] * np.cos(met_phi[idx]), lep_py + met[idx] * np.sin(met_phi[idx])))
-            sfos_masses = []
-            electron_pairings = []
-            for i in range(len(leptons_evt)):
-                li = leptons_evt[i]
-                if int(li.type) == 11:
-                    for photon_pt, photon_eta, photon_phi in ((lead_pt[idx], lead_eta[idx], lead_phi[idx]), (sub_pt[idx], sub_eta[idx], sub_phi[idx])):
-                        lep_px = float(li.pt * np.cos(li.phi))
-                        lep_py = float(li.pt * np.sin(li.phi))
-                        lep_pz = float(li.pt * np.sinh(li.eta))
-                        pho_px = float(photon_pt * np.cos(photon_phi))
-                        pho_py = float(photon_pt * np.sin(photon_phi))
-                        pho_pz = float(photon_pt * np.sinh(photon_eta))
-                        electron_pairings.append(float(_invariant_mass(lep_px + pho_px, lep_py + pho_py, lep_pz + pho_pz, float(li.e) + float(photon_pt * np.cosh(photon_eta)))))
-                for j in range(i + 1, len(leptons_evt)):
-                    lj = leptons_evt[j]
-                    if int(li.type) != int(lj.type):
-                        continue
-                    if int(li.charge + lj.charge) != 0:
-                        continue
-                    li_px = float(li.pt * np.cos(li.phi))
-                    li_py = float(li.pt * np.sin(li.phi))
-                    li_pz = float(li.pt * np.sinh(li.eta))
-                    lj_px = float(lj.pt * np.cos(lj.phi))
-                    lj_py = float(lj.pt * np.sin(lj.phi))
-                    lj_pz = float(lj.pt * np.sinh(lj.eta))
-                    sfos_masses.append(float(_invariant_mass(li_px + lj_px, li_py + lj_py, li_pz + lj_pz, float(li.e + lj.e))))
-            if sfos_masses:
-                closest = min(sfos_masses, key=lambda item: abs(item - 91.2))
-                mll[idx] = closest
-                z_veto[idx] = not (70.0 <= closest <= 110.0)
-            if electron_pairings:
-                megamma_veto[idx] = not any(84.0 <= mass <= 94.0 for mass in electron_pairings)
-
-        sideband = (full_mass[baseline_mask] >= FIT_RANGE[0]) & (full_mass[baseline_mask] < SIGNAL_WINDOW[0]) | (full_mass[baseline_mask] > SIGNAL_WINDOW[1]) & (full_mass[baseline_mask] <= FIT_RANGE[1])
-        signal_window = (full_mass[baseline_mask] >= SIGNAL_WINDOW[0]) & (full_mass[baseline_mask] <= SIGNAL_WINDOW[1])
-
-        fields = {
-            "event_number": event_number[baseline_mask],
-            "run_number": run_number[baseline_mask],
-            "weight": weights[baseline_mask],
-            "trigger_passed": trigger_mask[baseline_mask].astype(int),
-            "baseline_selected": np.ones(np.sum(baseline_mask), dtype=int),
-            "is_sideband": sideband.astype(int),
-            "is_signal_window": signal_window.astype(int),
-            "m_gammagamma": full_mass[baseline_mask],
-            "pT_gammagamma": full_ptgg[baseline_mask],
-            "eta_gammagamma": full_etagg[baseline_mask],
-            "pTt_gammagamma": full_ptt[baseline_mask],
-            "lead_pt": lead_pt,
-            "sublead_pt": sub_pt,
-            "lead_pt_over_mgg": lead_pt / np.clip(full_mass[baseline_mask], 1e-6, None),
-            "sublead_pt_over_mgg": sub_pt / np.clip(full_mass[baseline_mask], 1e-6, None),
-            "lead_eta": lead_eta,
-            "sublead_eta": sub_eta,
-            "max_abs_photon_eta": full_abs_eta_max[baseline_mask],
-            "N_jets_25": n_jets25,
-            "N_jets_30": n_jets30,
-            "N_jets_25_jvt_diagnostic": n_jets25_jvt,
-            "N_jets_30_jvt_diagnostic": n_jets30_jvt,
-            "N_central_jets_25": n_central25,
-            "N_forward_jets_25": n_forward25,
-            "N_btag_25": n_b25,
-            "N_lep": n_lep,
-            "m_ll": mll,
-            "Z_ll_veto": z_veto.astype(int),
-            "m_e_gamma_veto": megamma_veto.astype(int),
-            "pT_lepton_plus_MET": ptlepmet,
-            "MET": met,
-            "MET_significance": met_sig,
-            "leading_jet_pT_30": leading_jet_pt30,
-            "m_jj_30": mjj30,
-            "abs_delta_eta_jj_30": abs_deta30,
-            "pT_Hjj_30": pthjj30,
-            "deltaR_min_gamma_j": dr_min_gamma_j,
-            "VBF_centrality": vbf_centrality,
-            "H_T": ht,
-            "m_all_jets": m_all_jets,
-            "delta_y_gammagamma_jj": delta_y,
-            "cos_theta_star_gammagamma_jj": cos_theta_star,
-            "abs_delta_phi_gammagamma_jj_capped": abs_dphi_capped,
-            "training_mask_tth": training_mask_tth.astype(int),
-            "training_mask_vh": training_mask_vh.astype(int),
-            "training_mask_vbf": training_mask_vbf.astype(int),
-        }
+        fields = build_section8_observables(batch, view, baseline_mask, compute_lepton_vetoes=True).fields
         for key, value in fields.items():
             _append_chunk(arrays, key, np.asarray(value))
 
@@ -651,329 +279,41 @@ def _process_bdt_candidates(
     max_events: int | None = None,
     trigger_policy: str = "input_preselected",
 ) -> dict[str, Any]:
-    branches = [
-        "eventNumber",
-        "runNumber",
-        "mcWeight",
-        "ScaleFactor_PILEUP",
-        "ScaleFactor_PHOTON",
-        "ScaleFactor_JVT",
-        "ScaleFactor_FTAG",
-        "trigP",
-        "photon_pt",
-        "photon_eta",
-        "photon_phi",
-        "photon_e",
-        "photon_isLooseID",
-        "photon_isTightID",
-        "photon_ptcone20",
-        "photon_topoetcone40",
-        "photon_isLooseIso",
-        "photon_isTightIso",
-        "jet_pt",
-        "jet_eta",
-        "jet_phi",
-        "jet_e",
-        "jet_jvt",
-        "jet_btag_quantile",
-        "lep_type",
-        "lep_pt",
-        "lep_eta",
-        "lep_phi",
-        "lep_e",
-        "lep_charge",
-        "lep_isMediumID",
-        "lep_isLooseIso",
-        "lep_isTightIso",
-        "lep_z0",
-        "lep_d0sig",
-        "met",
-        "met_phi",
-    ]
+    branches = SECTION8_REQUIRED_BRANCHES
     arrays = _empty_bdt_arrays()
     for batch in _iterate_batches(sample["files"], branches, max_events=max_events):
-        event_number = np.asarray(batch["eventNumber"], dtype=np.int64)
-        run_number = np.asarray(batch["runNumber"], dtype=np.int64)
         weights = _event_weights(batch, sample)
-        n_events = len(event_number)
+        n_events = len(batch["eventNumber"])
         trigger_mask = _trigger_mask(batch, n_events, trigger_policy)
-
-        abs_eta = abs(batch["photon_eta"])
-        kin_mask = (batch["photon_pt"] > 25.0) & (abs_eta < 2.37) & ~((abs_eta > 1.37) & (abs_eta < 1.52))
-        loose_mask = kin_mask & batch["photon_isLooseID"]
-        photons = ak.zip(
-            {
-                "pt": batch["photon_pt"][loose_mask],
-                "eta": batch["photon_eta"][loose_mask],
-                "phi": batch["photon_phi"][loose_mask],
-                "e": batch["photon_e"][loose_mask],
-                "tight_id": batch["photon_isTightID"][loose_mask],
-                "tight_iso": _photon_iso_proxy(
-                    batch["photon_pt"][loose_mask],
-                    batch["photon_topoetcone40"][loose_mask],
-                    batch["photon_ptcone20"][loose_mask],
-                ),
-            }
-        )
-        ordered = photons[ak.argsort(photons.pt, axis=1, ascending=False)]
-        has_two = ak.to_numpy(ak.num(ordered)) >= 2
-        selected = ordered[has_two][:, :2]
-
-        full_tight = np.zeros(n_events, dtype=bool)
-        full_iso = np.zeros(n_events, dtype=bool)
-        full_ptfrac = np.zeros(n_events, dtype=bool)
-        full_mass = np.full(n_events, np.nan)
-        full_ptgg = np.full(n_events, np.nan)
-        full_etagg = np.full(n_events, np.nan)
-        full_ptt = np.full(n_events, np.nan)
-        full_lead_pt = np.full(n_events, np.nan)
-        full_sub_pt = np.full(n_events, np.nan)
-        full_lead_eta = np.full(n_events, np.nan)
-        full_sub_eta = np.full(n_events, np.nan)
-        full_abs_eta_max = np.full(n_events, np.nan)
-        sel_indices = np.where(has_two)[0]
-
-        if len(sel_indices):
-            lead = selected[:, 0]
-            sub = selected[:, 1]
-            lead_px, lead_py, lead_pz, lead_e = _vector_components(ak.to_numpy(lead.pt), ak.to_numpy(lead.eta), ak.to_numpy(lead.phi), ak.to_numpy(lead.e))
-            sub_px, sub_py, sub_pz, sub_e = _vector_components(ak.to_numpy(sub.pt), ak.to_numpy(sub.eta), ak.to_numpy(sub.phi), ak.to_numpy(sub.e))
-            dip_px = lead_px + sub_px
-            dip_py = lead_py + sub_py
-            dip_pz = lead_pz + sub_pz
-            dip_e = lead_e + sub_e
-            mass = _invariant_mass(dip_px, dip_py, dip_pz, dip_e)
-            ptt_x = lead_px - sub_px
-            ptt_y = lead_py - sub_py
-            ptt_norm = np.hypot(ptt_x, ptt_y)
-            ptt = np.divide(np.abs(dip_px * ptt_y - dip_py * ptt_x), ptt_norm, out=np.zeros_like(mass), where=ptt_norm > 0.0)
-            ptgg = np.hypot(dip_px, dip_py)
-            etagg = np.arcsinh(np.divide(dip_pz, np.clip(ptgg, 1e-6, None)))
-            lead_pt = ak.to_numpy(lead.pt)
-            sub_pt = ak.to_numpy(sub.pt)
-            lead_eta = ak.to_numpy(lead.eta)
-            sub_eta = ak.to_numpy(sub.eta)
-            tight_id = ak.to_numpy(lead.tight_id) & ak.to_numpy(sub.tight_id)
-            tight_iso = ak.to_numpy(lead.tight_iso) & ak.to_numpy(sub.tight_iso)
-            ptfrac = (lead_pt / np.clip(mass, 1e-6, None) > 0.35) & (sub_pt / np.clip(mass, 1e-6, None) > 0.25)
-            full_tight[sel_indices] = tight_id
-            full_iso[sel_indices] = tight_iso
-            full_ptfrac[sel_indices] = ptfrac
-            full_mass[sel_indices] = mass
-            full_ptgg[sel_indices] = ptgg
-            full_etagg[sel_indices] = etagg
-            full_ptt[sel_indices] = ptt
-            full_lead_pt[sel_indices] = lead_pt
-            full_sub_pt[sel_indices] = sub_pt
-            full_lead_eta[sel_indices] = lead_eta
-            full_sub_eta[sel_indices] = sub_eta
-            full_abs_eta_max[sel_indices] = np.maximum(np.abs(lead_eta), np.abs(sub_eta))
-
-        nominal_region = full_tight & full_iso
-        control_region = ~nominal_region
+        view = build_diphoton_event_view(batch, weights=weights, trigger_mask=trigger_mask)
+        nominal_region = view.nominal_photon_region
+        control_region = view.anti_id_or_iso_control_region
         candidate_mask = (
-            trigger_mask
-            & has_two
-            & full_ptfrac
-            & np.isfinite(full_mass)
-            & (full_mass > FIT_RANGE[0])
-            & (full_mass < FIT_RANGE[1])
+            view.trigger_mask
+            & view.has_two
+            & view.full_ptfrac
+            & np.isfinite(view.full_mass)
+            & (view.full_mass > FIT_RANGE[0])
+            & (view.full_mass < FIT_RANGE[1])
             & (nominal_region | control_region)
         )
         if not np.any(candidate_mask):
             continue
 
-        jets = ak.zip(
-            {
-                "pt": batch["jet_pt"],
-                "eta": batch["jet_eta"],
-                "phi": batch["jet_phi"],
-                "e": batch["jet_e"],
-                "jvt": batch["jet_jvt"],
-                "btag": batch["jet_btag_quantile"],
-            }
-        )
-        jets25 = jets[(jets.pt > 25.0) & (abs(jets.eta) < 4.4)]
-        jets30 = jets[(jets.pt > 30.0) & (abs(jets.eta) < 4.4)]
-        leptons = ak.zip(
-            {
-                "type": batch["lep_type"],
-                "pt": batch["lep_pt"],
-                "eta": batch["lep_eta"],
-                "phi": batch["lep_phi"],
-                "e": batch["lep_e"],
-                "charge": batch["lep_charge"],
-                "medium_id": batch["lep_isMediumID"],
-                "loose_iso": batch["lep_isLooseIso"],
-                "tight_iso": batch["lep_isTightIso"],
-                "z0": batch["lep_z0"],
-                "d0sig": batch["lep_d0sig"],
-            }
-        )
-        selector = ak.Array(candidate_mask)
-        cand_jets25 = jets25[selector]
-        cand_jets30 = jets30[selector]
-        cand_leptons = leptons[selector]
-        n_cand = int(np.sum(candidate_mask))
-        n_jets25 = ak.to_numpy(ak.num(cand_jets25))
-        n_jets30 = ak.to_numpy(ak.num(cand_jets30))
-        n_central25 = ak.to_numpy(ak.sum(abs(cand_jets25.eta) < 2.5, axis=1))
-        n_forward25 = ak.to_numpy(ak.sum(abs(cand_jets25.eta) >= 2.5, axis=1))
-        n_b25 = ak.to_numpy(ak.sum(cand_jets25.btag >= 4, axis=1))
-
-        electron_mask = (
-            (cand_leptons.type == 11)
-            & (cand_leptons.pt > 10.0)
-            & (abs(cand_leptons.eta) < 2.47)
-            & ~((abs(cand_leptons.eta) > 1.37) & (abs(cand_leptons.eta) < 1.52))
-            & cand_leptons.medium_id
-            & cand_leptons.loose_iso
-            & (abs(cand_leptons.z0) < 0.5)
-            & (abs(cand_leptons.d0sig) < 5.0)
-        )
-        muon_mask = (
-            (cand_leptons.type == 13)
-            & (cand_leptons.pt > 10.0)
-            & (abs(cand_leptons.eta) < 2.7)
-            & cand_leptons.medium_id
-            & cand_leptons.loose_iso
-            & (abs(cand_leptons.z0) < 0.5)
-            & (abs(cand_leptons.d0sig) < 3.0)
-        )
-        selected_leptons = cand_leptons[electron_mask | muon_mask]
-        n_lep = ak.to_numpy(ak.num(selected_leptons))
-
-        met = np.asarray(batch["met"], dtype=float)[candidate_mask]
-        lead_eta = full_lead_eta[candidate_mask]
-        sub_eta = full_sub_eta[candidate_mask]
-        lead_pt = full_lead_pt[candidate_mask]
-        sub_pt = full_sub_pt[candidate_mask]
-        selected_candidate = selected[candidate_mask[sel_indices]]
-        lead_phi = ak.to_numpy(selected_candidate[:, 0].phi) if len(selected_candidate) else np.zeros(n_cand)
-        sub_phi = ak.to_numpy(selected_candidate[:, 1].phi) if len(selected_candidate) else np.zeros(n_cand)
-        lead_e = lead_pt * np.cosh(lead_eta)
-        sub_e = sub_pt * np.cosh(sub_eta)
-        lead_px, lead_py, lead_pz, _ = _vector_components(lead_pt, lead_eta, lead_phi, lead_e)
-        sub_px, sub_py, sub_pz, _ = _vector_components(sub_pt, sub_eta, sub_phi, sub_e)
-        dip_px = lead_px + sub_px
-        dip_py = lead_py + sub_py
-        dip_pz = lead_pz + sub_pz
-        dip_e = lead_e + sub_e
-        dip_y = _rapidities(dip_e, dip_pz)
-
-        leading_jet_pt30 = np.full(n_cand, np.nan)
-        mjj30 = np.full(n_cand, np.nan)
-        abs_deta30 = np.full(n_cand, np.nan)
-        pthjj30 = np.full(n_cand, np.nan)
-        dr_min_gamma_j = np.full(n_cand, np.nan)
-        vbf_centrality = np.full(n_cand, np.nan)
-        ht = ak.to_numpy(ak.sum(cand_jets30.pt, axis=1))
-        m_all_jets = np.full(n_cand, np.nan)
-        delta_y = np.full(n_cand, np.nan)
-        cos_theta_star = np.full(n_cand, np.nan)
-        abs_dphi_capped = np.full(n_cand, np.nan)
-        training_mask_tth = (n_lep == 0) & (n_jets30 >= 3) & (n_b25 >= 1)
-        training_mask_vh = np.zeros(n_cand, dtype=bool)
-        training_mask_vbf = np.zeros(n_cand, dtype=bool)
-        bdt_subregion = np.full(n_cand, "inclusive", dtype=object)
-
-        if np.any(n_jets30 > 0):
-            leading_jet_pt30[n_jets30 > 0] = ak.to_numpy(cand_jets30[n_jets30 > 0][:, 0].pt)
-        for idx in range(n_cand):
-            jets30_evt = cand_jets30[idx]
-            if len(jets30_evt):
-                px = ak.to_numpy(jets30_evt.pt * np.cos(jets30_evt.phi))
-                py = ak.to_numpy(jets30_evt.pt * np.sin(jets30_evt.phi))
-                pz = ak.to_numpy(jets30_evt.pt * np.sinh(jets30_evt.eta))
-                energy = ak.to_numpy(jets30_evt.e)
-                m_all_jets[idx] = float(_invariant_mass(np.sum(px), np.sum(py), np.sum(pz), np.sum(energy)))
-            if len(jets30_evt) >= 2:
-                j1 = jets30_evt[0]
-                j2 = jets30_evt[1]
-                j1_px, j1_py, j1_pz, _ = _vector_components(np.asarray([j1.pt]), np.asarray([j1.eta]), np.asarray([j1.phi]), np.asarray([j1.e]))
-                j2_px, j2_py, j2_pz, _ = _vector_components(np.asarray([j2.pt]), np.asarray([j2.eta]), np.asarray([j2.phi]), np.asarray([j2.e]))
-                dijet_px = j1_px[0] + j2_px[0]
-                dijet_py = j1_py[0] + j2_py[0]
-                dijet_pz = j1_pz[0] + j2_pz[0]
-                dijet_e = float(j1.e + j2.e)
-                mjj30[idx] = float(_invariant_mass(dijet_px, dijet_py, dijet_pz, dijet_e))
-                abs_deta30[idx] = abs(float(j1.eta - j2.eta))
-                pthjj30[idx] = float(np.hypot(dip_px[idx] + dijet_px, dip_py[idx] + dijet_py))
-                dijet_y = float(_rapidities(np.asarray([dijet_e]), np.asarray([dijet_pz]))[0])
-                delta_y[idx] = dijet_y - dip_y[idx]
-                vbf_centrality[idx] = abs(full_etagg[candidate_mask][idx] - 0.5 * (float(j1.eta) + float(j2.eta)))
-                dphi = abs(_delta_phi(np.asarray([math.atan2(dip_py[idx], dip_px[idx])]), np.asarray([math.atan2(dijet_py, dijet_px)]))[0])
-                abs_dphi_capped[idx] = min(dphi, 2.94)
-                drs = []
-                for photon_eta, photon_phi in ((lead_eta[idx], lead_phi[idx]), (sub_eta[idx], sub_phi[idx])):
-                    for jet_eta, jet_phi in ((float(j1.eta), float(j1.phi)), (float(j2.eta), float(j2.phi))):
-                        drs.append(float(np.hypot(photon_eta - jet_eta, _delta_phi(np.asarray([photon_phi]), np.asarray([jet_phi]))[0])))
-                dr_min_gamma_j[idx] = min(drs) if drs else np.nan
-                training_mask_vh[idx] = bool(60.0 < mjj30[idx] < 120.0)
-                training_mask_vbf[idx] = bool(abs_deta30[idx] > 2.0 and vbf_centrality[idx] < 5.0)
-                if training_mask_vbf[idx]:
-                    bdt_subregion[idx] = "vbf_low_pT_Hjj" if pthjj30[idx] < 25.0 else "vbf_high_pT_Hjj"
-                system_px = dip_px[idx] + dijet_px
-                system_py = dip_py[idx] + dijet_py
-                system_pz = dip_pz[idx] + dijet_pz
-                system_p = np.sqrt(system_px**2 + system_py**2 + system_pz**2)
-                dip_p = np.sqrt(dip_px[idx] ** 2 + dip_py[idx] ** 2 + dip_pz[idx] ** 2)
-                if system_p > 0.0 and dip_p > 0.0:
-                    cos_theta_star[idx] = (dip_px[idx] * system_px + dip_py[idx] * system_py + dip_pz[idx] * system_pz) / (dip_p * system_p)
-
-        sideband = (full_mass[candidate_mask] >= FIT_RANGE[0]) & (full_mass[candidate_mask] < SIGNAL_WINDOW[0]) | (full_mass[candidate_mask] > SIGNAL_WINDOW[1]) & (full_mass[candidate_mask] <= FIT_RANGE[1])
-        signal_window = (full_mass[candidate_mask] >= SIGNAL_WINDOW[0]) & (full_mass[candidate_mask] <= SIGNAL_WINDOW[1])
         nominal = nominal_region[candidate_mask]
         control = control_region[candidate_mask]
         photon_region = np.where(nominal, "nominal_photon_region", "anti_id_or_iso_control_region")
-        fields = {
-            "event_number": event_number[candidate_mask],
-            "run_number": run_number[candidate_mask],
-            "weight": weights[candidate_mask],
-            "trigger_passed": trigger_mask[candidate_mask].astype(int),
-            "baseline_selected": nominal.astype(int),
-            "is_sideband": sideband.astype(int),
-            "is_signal_window": signal_window.astype(int),
-            "m_gammagamma": full_mass[candidate_mask],
-            "pT_gammagamma": full_ptgg[candidate_mask],
-            "eta_gammagamma": full_etagg[candidate_mask],
-            "pTt_gammagamma": full_ptt[candidate_mask],
-            "lead_pt": lead_pt,
-            "sublead_pt": sub_pt,
-            "lead_eta": lead_eta,
-            "sublead_eta": sub_eta,
-            "max_abs_photon_eta": full_abs_eta_max[candidate_mask],
-            "N_jets_25": n_jets25,
-            "N_jets_30": n_jets30,
-            "N_central_jets_25": n_central25,
-            "N_forward_jets_25": n_forward25,
-            "N_btag_25": n_b25,
-            "N_lep": n_lep,
-            "m_ll": np.full(n_cand, np.nan),
-            "Z_ll_veto": np.ones(n_cand, dtype=int),
-            "m_e_gamma_veto": np.ones(n_cand, dtype=int),
-            "pT_lepton_plus_MET": np.full(n_cand, np.nan),
-            "MET": met,
-            "MET_significance": met / np.sqrt(np.clip(ht, 1.0, None)),
-            "leading_jet_pT_30": leading_jet_pt30,
-            "m_jj_30": mjj30,
-            "abs_delta_eta_jj_30": abs_deta30,
-            "pT_Hjj_30": pthjj30,
-            "deltaR_min_gamma_j": dr_min_gamma_j,
-            "VBF_centrality": vbf_centrality,
-            "H_T": ht,
-            "m_all_jets": m_all_jets,
-            "delta_y_gammagamma_jj": delta_y,
-            "cos_theta_star_gammagamma_jj": cos_theta_star,
-            "abs_delta_phi_gammagamma_jj_capped": abs_dphi_capped,
-            "training_mask_tth": training_mask_tth.astype(int),
-            "training_mask_vh": training_mask_vh.astype(int),
-            "training_mask_vbf": training_mask_vbf.astype(int),
-            "photon_region": photon_region,
-            "nominal_photon_region": nominal.astype(int),
-            "anti_id_or_iso_control_region": control.astype(int),
-            "bdt_subregion": bdt_subregion,
-        }
+        fields = build_section8_observables(
+            batch,
+            view,
+            candidate_mask,
+            baseline_selected=nominal.astype(int),
+            compute_lepton_vetoes=False,
+            include_bdt_subregion=True,
+        ).fields
+        fields["photon_region"] = photon_region
+        fields["nominal_photon_region"] = nominal.astype(int)
+        fields["anti_id_or_iso_control_region"] = control.astype(int)
         for key, value in fields.items():
             _append_chunk(arrays, key, np.asarray(value))
 
@@ -1222,9 +562,14 @@ def _write_bdt_optimization_metadata(
     prepare_bdt_training: bool,
     train_bdts: bool,
     score_bdts: bool,
+    runs_dir: Path | None = None,
+    registry_path: Path | None = None,
 ) -> None:
     if not (prepare_bdt_training or train_bdts or score_bdts):
         return
+    repo_root = Path(__file__).resolve().parents[2]
+    runs_dir = repo_root / "runs" if runs_dir is None else Path(runs_dir)
+    registry_path = repo_root / "optimization_infra" / "runs.jsonl" if registry_path is None else Path(registry_path)
     run_id = f"section8_bdt_{stable_hash({'outputs': str(outputs), 'time': utcnow_iso()})[:12]}"
     sample_hash = stable_hash(
         [
@@ -1295,7 +640,7 @@ def _write_bdt_optimization_metadata(
             "possible_implementation_issue": None,
         },
     }
-    run_dir = ensure_dir(Path("/Users/haichenwang/Work/newpipeline/modular-pipeline/runs") / run_id)
+    run_dir = ensure_dir(runs_dir / run_id)
     write_json(observation, run_dir / "observations.yaml")
     registry_record = {
         "run_id": run_id,
@@ -1332,7 +677,7 @@ def _write_bdt_optimization_metadata(
         },
         "inputs": str(inputs),
     }
-    registry_path = Path("/Users/haichenwang/Work/newpipeline/modular-pipeline/optimization_infra/runs.jsonl")
+    ensure_dir(registry_path.parent)
     with registry_path.open("a") as handle:
         handle.write(json.dumps(registry_record, sort_keys=True) + "\n")
 
@@ -1349,6 +694,8 @@ def run_section8_ads(
     optimize_boundaries_flag: bool = False,
     reuse_bdt_artifacts: Path | None = None,
     trigger_policy: str = "input_preselected",
+    metadata_runs_dir: Path | None = None,
+    metadata_registry_path: Path | None = None,
 ) -> dict[str, Any]:
     outputs = ensure_dir(outputs)
     ads = load_ads(ads_path)
@@ -1419,6 +766,8 @@ def run_section8_ads(
         prepare_bdt_training=prepare_bdt_training,
         train_bdts=train_bdts,
         score_bdts=score_bdts,
+        runs_dir=metadata_runs_dir,
+        registry_path=metadata_registry_path,
     )
     write_json(
         {
@@ -1472,6 +821,8 @@ def main() -> None:
     parser.add_argument("--optimize-boundaries", action="store_true")
     parser.add_argument("--reuse-bdt-artifacts", type=Path)
     parser.add_argument("--trigger-policy", choices=["input_preselected", "trigP", "none"], default="input_preselected")
+    parser.add_argument("--metadata-runs-dir", type=Path, help="Directory for Section 8 BDT run observation records; defaults to repo-local runs/.")
+    parser.add_argument("--metadata-registry", type=Path, help="JSONL registry path for Section 8 BDT run records; defaults to repo-local optimization_infra/runs.jsonl.")
     args = parser.parse_args()
     run_section8_ads(
         ads_path=Path(args.ads),
@@ -1484,6 +835,8 @@ def main() -> None:
         optimize_boundaries_flag=args.optimize_boundaries,
         reuse_bdt_artifacts=args.reuse_bdt_artifacts,
         trigger_policy=args.trigger_policy,
+        metadata_runs_dir=args.metadata_runs_dir,
+        metadata_registry_path=args.metadata_registry,
     )
 
 

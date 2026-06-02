@@ -1,0 +1,49 @@
+schema_draft: optimization_search_space
+status: non_authoritative_example
+version: 0.0.1
+scans:
+  - scan_id: bdt_boundary_scan_without_retraining
+    description: Scan category boundaries after reusing a compatible trained model.
+    parameters:
+      - path: categories.ttH_had_BDT1.select_when.threshold
+        values:
+          - 0.90
+          - 0.92
+          - 0.94
+      - path: categories.ttH_had_BDT2.select_when.lower_threshold
+        values:
+          - 0.80
+          - 0.83
+          - 0.86
+    reuses:
+      - model_training
+      - model_scoring
+    invalidates:
+      - category_assignment
+      - template_production
+      - fit_construction
+      - significance
+  - scan_id: bdt_hyperparameter_scan
+    description: Scan model hyperparameters and retrain before scoring.
+    parameters:
+      - path: models.BDT_ttH.training.hyperparameters.max_depth
+        values:
+          - 2
+          - 3
+          - 4
+      - path: models.BDT_ttH.training.hyperparameters.learning_rate
+        values:
+          - 0.03
+          - 0.05
+          - 0.08
+    invalidates:
+      - model_training
+      - model_scoring
+      - category_assignment
+      - template_production
+      - fit_construction
+      - significance
+guards:
+  require_validated_config: true
+  require_human_approval_for_physics_policy_change: true
+  do_not_promote_generated_artifacts: true

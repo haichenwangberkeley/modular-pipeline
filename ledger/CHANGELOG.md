@@ -22,6 +22,38 @@ Migration Note:
 Approval Status:
 ```
 
+## 2026-06-02
+
+Date: 2026-06-02
+Author: Codex
+Service ID: event_processor_histogram_builder
+Old Version: 0.1.0
+New Version: 0.1.0
+Change Class: Class B: Backward-compatible service extension
+Summary: Added an internal shared Section 8 observable builder and removed host-specific Section 8 paths from active analysis-version configuration and BDT metadata-writing logic.
+Motivation: Create the first stable observable-materialization seam for future configuration-driven routing while preserving current physics semantics and portability.
+Files Changed:
+
+- `analysis/section8_ads/observables.py`
+- `analysis/section8_ads/pipeline.py`
+- `analysis/analysis_versions.json`
+- `configs/schema_drafts/*.example.yaml`
+- `docs/OBSERVABLE_LAYER_REFACTOR_PLAN.md`
+- `tests/test_analysis_versions.py`
+- `tests/test_section8_ads_observables.py`
+- `tests/test_section8_ads_loader.py`
+- `tests/test_section8_ads_branch_map.py`
+- `ledger/GLOBAL_INVARIANTS.yaml`
+- `ledger/EXECUTABLE_SERVICES.yaml`
+- `ledger/CHANGELOG.md`
+
+Tests Run: `python -m py_compile analysis/section8_ads/observables.py analysis/section8_ads/pipeline.py tests/test_section8_ads_observables.py`; `pytest -q tests/test_analysis_versions.py tests/test_section8_ads_observables.py tests/test_section8_ads_categories.py tests/test_section8_ads_bdt_training.py tests/test_section8_ads_loader.py tests/test_section8_ads_branch_map.py tests/test_section8_process_cutflow.py`; `pytest -q`.
+Baseline Configurations Tested: Synthetic unit fixtures only; no external ROOT-data run.
+Backward-Compatibility Assessment: Existing CLI entrypoints, category routing, BDT training mechanics, split policy, model parameters, cuts, blinding, and output field names are preserved. Section 8 external ADS and BDT artifact paths must be supplied explicitly by CLI overrides or direct function arguments.
+Affected Consumers: Section 8 ADS pipeline, modular Section 8 adapter, future optimization agents.
+Migration Note: Draft schema examples are non-authoritative and are not wired into runtime execution.
+Approval Status: No physics-policy approval required; no physics semantics changed.
+
 ## 2026-05-31
 
 Date: 2026-05-31

@@ -1,0 +1,58 @@
+schema_draft: categories
+status: non_authoritative_example
+version: 0.0.1
+routing:
+  mode: ordered_first_match
+  tri_state:
+    assigned: assigned_category
+    no_match: unassigned
+    blocked_missing_input: blocked_missing_input
+categories:
+  - name: ttH_had_BDT1
+    required_inputs:
+      - N_lep
+      - N_jets_30
+      - N_btag_25
+      - BDT_ttH
+    eligible_when: N_lep == 0 and N_jets_30 >= 3 and N_btag_25 >= 1
+    blocked_when_missing:
+      - BDT_ttH
+    select_when: BDT_ttH > 0.92
+  - name: ttH_had_BDT2
+    required_inputs:
+      - N_lep
+      - N_jets_30
+      - N_btag_25
+      - BDT_ttH
+    eligible_when: N_lep == 0 and N_jets_30 >= 3 and N_btag_25 >= 1
+    blocked_when_missing:
+      - BDT_ttH
+    select_when: BDT_ttH > 0.83 and BDT_ttH <= 0.92
+  - name: ggH_2J_BSM
+    required_inputs:
+      - N_jets_30
+      - pT_gammagamma
+    eligible_when: N_jets_30 >= 2
+    blocked_when_missing: []
+    select_when: pT_gammagamma >= 200.0
+  - name: ggH_0J_Cen
+    required_inputs:
+      - N_jets_30
+      - max_abs_photon_eta
+    eligible_when: N_jets_30 == 0
+    blocked_when_missing: []
+    select_when: max_abs_photon_eta <= 0.95
+diagnostics:
+  emit_reason: true
+  emit_blocked_flag: true
+invalidation:
+  category_boundary_change:
+    invalidates:
+      - category_assignment
+      - template_production
+      - fit_construction
+      - significance
+  required_input_change:
+    invalidates:
+      - category_assignment
+      - template_production

@@ -24,11 +24,11 @@ If any of these change, retrain the affected BDTs before comparing category yiel
 Use the Section 8 CLI in staged mode:
 
 ```bash
-PYTHONPATH=/Users/haichenwang/Work/newpipeline/modular-pipeline \
-/Users/haichenwang/Work/analysis-automation/workspace/.rootenv/bin/python \
+PYTHONPATH=/path/to/modular-pipeline \
+python \
 -m analysis.section8_ads.pipeline \
-  --ads /Users/haichenwang/Downloads/atlas_hgg_36fb_section8_ads.json \
-  --inputs /Users/haichenwang/Work/newpipeline/input-data \
+  --ads /path/to/atlas_hgg_36fb_section8_ads.json \
+  --inputs /path/to/input-data \
   --outputs /path/to/outputs \
   --prepare-bdt-training \
   --train-bdts \
@@ -62,3 +62,7 @@ After component normalization, the trainer balances the total signal and backgro
 Boundary optimization is meaningful only when nominal analysis events have finite BDT scores. If a classifier has no finite scores, keep the ADS seed boundaries and record the blocked status.
 
 Optimized boundaries are local supplemental choices. Reports must always show the ADS seed boundaries next to optimized values.
+
+## Observable Builder Compatibility
+
+Section 8 nominal processing and BDT-training-candidate preparation now share `analysis.section8_ads.observables` for diphoton, object-derived, event-derived, and training-mask observables. This is an internal compatibility seam only. It does not change category routing, BDT training mechanics, boundary optimization, or the physics-policy meaning of any variable.

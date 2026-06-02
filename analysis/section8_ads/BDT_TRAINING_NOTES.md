@@ -196,8 +196,8 @@ The Section 8 CLI exposes the BDT workflow through:
 
 ```bash
 hgg-section8 \
-  --ads /Users/haichenwang/Downloads/atlas_hgg_36fb_section8_ads.json \
-  --inputs /Users/haichenwang/Work/newpipeline/input-data \
+  --ads /path/to/atlas_hgg_36fb_section8_ads.json \
+  --inputs /path/to/input-data \
   --outputs /path/to/outputs \
   --prepare-bdt-training \
   --train-bdts \
