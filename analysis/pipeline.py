@@ -6,6 +6,7 @@ from typing import Any
 
 from analysis.common import ensure_dir, read_json, stable_hash, write_json, write_text
 from analysis.config.load_summary import normalize_summary, write_regions_yaml
+from analysis.config.versions import apply_analysis_version
 from analysis.hists.histmaker import build_templates, process_sample
 from analysis.plotting.blinded_regions import generate_plots
 from analysis.preflight import run_preflight
@@ -111,7 +112,17 @@ def _apply_runtime_overrides(normalized: dict[str, Any], *, unblind_observed_sig
     return normalized
 
 
-def run_all_stages(*, summary, inputs, outputs, max_events, unblind_observed_significance: bool = False):
+def run_all_stages(
+    *,
+    summary,
+    inputs,
+    outputs,
+    max_events,
+    unblind_observed_significance: bool = False,
+    analysis_version: str | None = None,
+    section8_ads_path: Path | None = None,
+    section8_bdt_artifacts: Path | None = None,
+):
     summary_path = Path(summary)
     inputs_path = Path(inputs)
     outputs_path = ensure_dir(outputs)
@@ -123,6 +134,13 @@ def run_all_stages(*, summary, inputs, outputs, max_events, unblind_observed_sig
         normalized,
         unblind_observed_significance=unblind_observed_significance,
     )
+    normalized["runtime_defaults"] = apply_analysis_version(
+        normalized["runtime_defaults"],
+        version_name=analysis_version,
+        section8_ads_path=section8_ads_path,
+        section8_bdt_artifacts=section8_bdt_artifacts,
+    )
+    normalized["config_hash"] = stable_hash(normalized)
     if errors:
         _write_summary_products(normalized, errors, outputs_path)
         raise RuntimeError(f"Summary validation failed: {errors}")
@@ -153,12 +171,12 @@ def run_all_stages(*, summary, inputs, outputs, max_events, unblind_observed_sig
         processed_samples.append(process_sample(sample, normalized["runtime_defaults"], max_events=max_events, cache_dir=cache_dir))
 
     build_templates(processed_samples, normalized["runtime_defaults"], outputs_path / "hists")
-    cutflow_table, _, _ = build_cutflow_and_yields(processed_samples, outputs_path)
+    cutflow_table, _, _ = build_cutflow_and_yields(processed_samples, normalized["runtime_defaults"], outputs_path)
     fit_context = run_fit(processed_samples, registry, normalized, outputs_path)
     build_systematics(registry, normalized, outputs_path)
     run_significance(fit_context, normalized, outputs_path)
     plot_manifest = generate_plots(processed_samples, normalized, fit_context, outputs_path, cutflow_table)
-    write_data_mc_discrepancy_artifacts(processed_samples, outputs_path)
+    write_data_mc_discrepancy_artifacts(processed_samples, normalized["runtime_defaults"], outputs_path)
     write_background_template_smoothing_artifacts(fit_context, outputs_path)
     write_mc_effective_lumi_check(registry, fit_context, outputs_path, policy_defaults)
     write_verification_status(plot_manifest, fit_context, outputs_path)

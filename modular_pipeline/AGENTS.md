@@ -42,6 +42,73 @@ pytest -q
 - `docs/OFFICIAL_BACKGROUND_SELECTION.md`: optional HHXYY `bkgParamTool` background-selection cross-check.
 - `<outputs>/modular_pipeline_manifest.json`: record of what ran, what was masked, and what was dependency-skipped.
 - `<outputs>/modular_pipeline_state.json`: incremental artifact ledger and entrypoint-readiness map.
+- `runs/ANALYSIS_TREE.yaml`: canonical analysis-version lineage tree across optimization rounds.
+- `runs/ANALYSIS_TREE.md`: human-readable rendering of the analysis-version tree.
+- `runs/<round_id>/ROUND_STATE.yaml`: canonical machine-readable optimization-round handoff artifact.
+- `runs/<round_id>/ROUND_STATE.md`: human-readable rendering of the same round state.
+
+## Optimization Handoff
+
+For any follow-up optimization round, read `runs/ANALYSIS_TREE.yaml` first if
+it exists. Use it to choose the parent likelihood version deliberately, then
+read that node's `ROUND_STATE.yaml` before choosing the next scan or strategy
+branch.
+
+`ANALYSIS_TREE` is the canonical lineage map across optimization rounds. Each
+node is a full HEP analysis likelihood version, and each edge records how a
+child version descends from its parent. Do not infer lineage from directory
+names or timestamps when `ANALYSIS_TREE` exists.
+
+`ROUND_STATE` is the canonical handoff artifact between rounds. It is intended
+to be consumed by both agents and human scientists, and it must drive the next
+decision more than ad hoc recollection or isolated metric files.
+
+Treat `ROUND_STATE.yaml` as the full analysis-state artifact for the selected
+reference point, not as a short memo. A valid `ROUND_STATE` must contain:
+
+- the analysis definition that was actually run;
+- the full primary result set for the current reference point;
+- the artifact catalog needed to locate detailed outputs;
+- the interpretation and trajectory needed to choose the next step.
+
+For HEP analysis, the critical object is the likelihood definition. Future
+agents must assume that the analysis is effectively defined by the region
+selection and the observable fitted in each region. `ROUND_STATE.md` must
+therefore present this in human-readable form.
+
+At minimum, the next-round planner should read:
+
+- `runs/ANALYSIS_TREE.yaml`
+- `runs/<round_id>/ROUND_STATE.yaml`
+- the paths listed under `handoff_read_first`
+
+Use `ROUND_STATE` to answer:
+
+- what the current best known state is;
+- what full analysis definition produced that state;
+- what the likelihood definition is in plain language: fit regions, selections,
+  and fitted observables;
+- what the full primary result set is for that state;
+- how the current result should be interpreted, not just what the raw metric is;
+- whether the metric landscape looks like a sharp optimum or a broad plateau;
+- how the current round fits into the trajectory of prior rounds;
+- what next actions are currently recommended.
+
+After completing a new optimization round, regenerate that round's
+`ROUND_STATE.yaml` and update `runs/ANALYSIS_TREE.yaml` / `runs/ANALYSIS_TREE.md`.
+The handoff is incomplete until both artifacts reflect the new likelihood
+version.
+
+Do not start a new optimization round from only `scan_results.*`,
+`significance_asimov.json`, or a PDF note if a `ROUND_STATE` artifact exists.
+Those files are supporting evidence, but `ROUND_STATE` is the primary round
+summary and decision handoff.
+
+If `ROUND_STATE` is missing `analysis_definition`, `analysis_results`,
+`artifact_catalog`, or a human-readable likelihood-definition section in
+`ROUND_STATE.md`, treat the round handoff as incomplete and fix/regenerate
+`ROUND_STATE` before planning or executing the next optimization step. Do not
+push that responsibility back to the user.
 
 ## Component Semantics
 

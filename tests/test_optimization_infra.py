@@ -15,7 +15,9 @@ from optimization_infra.plan_candidate_run import (
     write_yaml,
 )
 from optimization_infra.run_scan import append_run_registry, run_scan, validate_scan_spec
+from optimization_infra.run_optimization_loop import run_optimization_loop, validate_loop_spec
 from optimization_infra.summarize_scan import create_observations, summarize_scan
+from optimization_infra.version_round import create_round_version_record, make_version_name, slugify
 
 
 def workflow() -> dict:
@@ -310,3 +312,81 @@ def test_scan_summary_generation(tmp_path: Path) -> None:
     summary = summarize_scan("scan", [obs1, obs2], runs_dir=tmp_path)
     assert summary["best_candidate"]["run_id"] == "c1"
     assert (tmp_path / "scan" / "SCAN_SUMMARY.md").exists()
+
+
+def test_version_name_is_descriptive_and_slugged() -> None:
+    name = make_version_name(
+        round_id="Round 001",
+        strategy_id="Baseline Strategy",
+        objective="Expected Significance",
+        descriptor="Histogram bin width scan",
+    )
+    assert name == "opt-round-001-baseline-strategy-expected-significance-histogram-bin-width-scan"
+    assert slugify("  weird / name !! ") == "weird-name"
+
+
+def test_round_version_record_preserves_git_state(tmp_path: Path) -> None:
+    record = create_round_version_record(
+        run_dir=tmp_path / "round",
+        round_id="round_001",
+        strategy_id="baseline_strategy",
+        objective="expected_significance",
+        descriptor="dry run",
+        repo=Path.cwd(),
+    )
+    assert record["version_name"].startswith("opt-round_001-baseline_strategy")
+    assert record["git_state"]["commit"]
+    assert (tmp_path / "round" / "VERSION.yaml").exists()
+    assert (tmp_path / "round" / "VERSION.md").exists()
+
+
+def test_bounded_loop_runner_stops_at_max_rounds(tmp_path: Path) -> None:
+    base = tmp_path / "base.yaml"
+    write_yaml(base, parent_config())
+    graph = tmp_path / "graph.yaml"
+    write_yaml(graph, workflow())
+    led = tmp_path / "ledger.yaml"
+    write_yaml(led, ledger())
+    inv = tmp_path / "invariants.yaml"
+    write_yaml(inv, invariants())
+    scan_spec = {
+        "scan_id": "loop_scan",
+        "parent_run_id": "parent",
+        "branch_id": "loop_branch",
+        "strategy_id": "loop_strategy",
+        "objective_metric": "expected_significance",
+        "base_config": str(base),
+        "parent_config": str(base),
+        "workflow_graph": str(graph),
+        "artifact_manifests": [],
+        "ledger": str(led),
+        "global_invariants": str(inv),
+        "parameters": [{"config_path": "fit.range", "values": [[110, 150]]}],
+        "execution": {"dry_run_only": True, "reuse_valid_artifacts": True, "max_parallel_jobs": 1, "stop_on_verifier_failure": False},
+        "reporting": {"summarize_cut_flow_changes": True, "summarize_yield_changes": True, "summarize_metric_changes": True},
+    }
+    scan_path = tmp_path / "scan.yaml"
+    write_yaml(scan_path, scan_spec)
+    loop_spec = {
+        "loop_id": "loop",
+        "objective_metric": "expected_significance",
+        "max_rounds": 1,
+        "dry_run_only": True,
+        "stop_on_blocked_plan": False,
+        "rounds": [
+            {"round_id": "round_001", "descriptor": "first round", "scan_spec": str(scan_path)},
+            {"round_id": "round_002", "descriptor": "second round", "scan_spec": str(scan_path)},
+        ],
+    }
+    validate_loop_spec(loop_spec)
+    summary = run_optimization_loop(
+        loop_spec=loop_spec,
+        runs_dir=tmp_path / "runs",
+        registry_path=tmp_path / "runs.jsonl",
+        repo=Path.cwd(),
+    )
+    assert summary["rounds_completed"] == 1
+    assert summary["stopped_reason"] == "max_rounds_reached"
+    assert (tmp_path / "runs" / "loop" / "round_001" / "ROUND_REPORT.md").exists()
+    assert (tmp_path / "runs" / "loop" / "round_001" / "VERSION.yaml").exists()
+    assert not (tmp_path / "runs" / "loop" / "round_002").exists()

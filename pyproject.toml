@@ -16,8 +16,10 @@ dependencies = [
   "matplotlib>=3.8",
   "numpy>=1.26",
   "PyYAML>=6",
+  "scikit-learn>=1.5",
   "scipy>=1.11",
   "uproot>=5",
+  "xgboost>=2.1",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +41,7 @@ hgg-systematics = "analysis.stats.systematics:main"
 hgg-official-bkg-select = "analysis.stats.official_bkg_selector:main"
 hgg-smoothing-study = "analysis.ad_hoc_smoothing_method_study:main"
 hgg-hhxyy-fit-plots = "analysis.plotting.hhxyy_fit_plots:main"
+hgg-section8 = "analysis.section8_ads.pipeline:main"
 
 [tool.setuptools]
 include-package-data = true

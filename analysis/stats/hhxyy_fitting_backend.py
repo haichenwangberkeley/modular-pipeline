@@ -14,17 +14,13 @@ from typing import Any
 import numpy as np
 import yaml
 
+from analysis.selections.engine import CATEGORY_ORDER as DEFAULT_CATEGORY_ORDER
+
 FIT_ID = "FIT1"
 MASS_LOW = 105.0
 MASS_HIGH = 160.0
 N_BINS = 55
-CATEGORY_ORDER = [
-    "central_high_ptt",
-    "central_low_ptt",
-    "rest_high_ptt",
-    "rest_low_ptt",
-    "two_jet_vbf_enriched",
-]
+CATEGORY_ORDER = DEFAULT_CATEGORY_ORDER
 FIXED_SIGNAL_SHAPE_NP = "sigmaCB_*,alphaCBLo_*,alphaCBHi_*,nCBLo_*,nCBHi_*"
 
 SIGNAL_TEMPLATE = """\
@@ -239,7 +235,9 @@ def is_atlas_env_available(*, require_quicklimit: bool = False) -> bool:
 
 def _active_categories(category_context: dict[str, Any], category_order: list[str] | None = None) -> list[str]:
     order = category_order or CATEGORY_ORDER
-    return [category for category in order if category in category_context]
+    active = [category for category in order if category in category_context]
+    extras = [category for category in category_context if category not in active]
+    return active + sorted(extras)
 
 
 def _as_counts(value: Any, *, default: float = 0.0) -> np.ndarray:

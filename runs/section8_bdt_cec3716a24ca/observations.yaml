@@ -1,0 +1,63 @@
+{
+  "configuration_changes": {
+    "changed_parameters": [
+      "section8_ads.bdt_training"
+    ],
+    "rationale": "Enable Section 8 supplemental BDT training with anti-ID/anti-isolation data controls.",
+    "change_mode": "qualitative_strategy"
+  },
+  "primary_metric_response": {
+    "metric": "trained_classifiers",
+    "baseline_value": 0,
+    "candidate_value": 2,
+    "absolute_change": 2,
+    "relative_change": null,
+    "uncertainty": null,
+    "meaningfulness": "infrastructure validation"
+  },
+  "yield_cutflow_response": {
+    "yield_changes": null,
+    "cutflow_changes": null,
+    "signal_background_pattern": "See bdt_training_sample_audit.json for per-process training rows.",
+    "unexpected_empty_or_unstable_categories": null
+  },
+  "shape_response": {
+    "changed_distributions": [
+      "BDT_ttH",
+      "BDT_VH",
+      "BDT_VBF"
+    ],
+    "localized_or_global": "localized to BDT-dependent Section 8 categories",
+    "suspicious_structures": null,
+    "binning_assessment": null
+  },
+  "fit_inference_response": {
+    "parameter_changes": null,
+    "nuisance_changes": null,
+    "goodness_of_fit_changes": null,
+    "uncertainty_changes": null,
+    "dominant_categories": null
+  },
+  "validation_response": {
+    "verifier_results": "smoke-test dependent",
+    "warnings": [
+      "One or more BDTs did not train; inspect classifier_training_report.json."
+    ],
+    "failed_checks": [],
+    "artifacts_reused": [],
+    "stages_rerun": [
+      "section8_bdt_training"
+    ],
+    "cache_concerns": null
+  },
+  "interpretation": {
+    "status": "new qualitative opportunity",
+    "direct_observations": {
+      "trained_classifiers": 2,
+      "blocked_classifiers": 1
+    },
+    "plausible_interpretation": "Prepared BDT artifacts are suitable for future optimization only when all needed classifiers train.",
+    "unresolved_uncertainty": "Supplemental BDTs are not official ATLAS artifacts.",
+    "possible_implementation_issue": null
+  }
+}

@@ -23,6 +23,9 @@ def run_pipeline(
     outputs: Path,
     max_events: int | None,
     unblind_observed_significance: bool = False,
+    analysis_version: str | None = None,
+    section8_ads_path: Path | None = None,
+    section8_bdt_artifacts: Path | None = None,
 ) -> None:
     from analysis.pipeline import run_all_stages
 
@@ -32,6 +35,9 @@ def run_pipeline(
         outputs=outputs,
         max_events=max_events,
         unblind_observed_significance=unblind_observed_significance,
+        analysis_version=analysis_version,
+        section8_ads_path=section8_ads_path,
+        section8_bdt_artifacts=section8_bdt_artifacts,
     )
 
 
@@ -54,6 +60,9 @@ def main() -> None:
     run_parser.add_argument("--outputs", required=True)
     run_parser.add_argument("--max-events", type=int)
     run_parser.add_argument("--unblind-observed-significance", action="store_true")
+    run_parser.add_argument("--analysis-version")
+    run_parser.add_argument("--section8-ads", type=Path)
+    run_parser.add_argument("--section8-bdt-artifacts", type=Path)
 
     args = parser.parse_args()
     if args.command == "bootstrap":
@@ -67,6 +76,9 @@ def main() -> None:
             Path(args.outputs),
             args.max_events,
             args.unblind_observed_significance,
+            args.analysis_version,
+            args.section8_ads,
+            args.section8_bdt_artifacts,
         )
 
 

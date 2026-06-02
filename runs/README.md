@@ -7,6 +7,8 @@ Expected layout:
 ```text
 runs/
   <run_id>/
+    VERSION.md
+    VERSION.yaml
     config_snapshot/
     EXECUTION_PLAN.md
     execution_plan.yaml
@@ -20,3 +22,19 @@ runs/
 Scientific outputs may live under a run-specific `outputs/` directory when a candidate is actually executed. Infrastructure dry runs may contain only plans, registry entries, and summaries.
 
 Do not treat a dry-run plan as a completed scientific run.
+
+Loop-level dry runs may also write:
+
+```text
+runs/
+  <loop_id>/
+    LOOP_SUMMARY.md
+    LOOP_SUMMARY.yaml
+    <round_id>/
+      VERSION.md
+      VERSION.yaml
+      ROUND_REPORT.md
+      ROUND_REPORT.yaml
+```
+
+Compact results are append-only by convention: create a new run, scan, loop, or round directory rather than overwriting earlier evidence.

@@ -1,0 +1,13 @@
+loop_id: example_two_round_dry_loop
+objective_metric: expected_significance
+max_rounds: 2
+dry_run_only: true
+stop_on_blocked_plan: true
+
+rounds:
+  - round_id: round_001
+    descriptor: histogram bin width dry run
+    scan_spec: optimization_infra/example_scan.yaml
+  - round_id: round_002
+    descriptor: repeat planning dry run for infrastructure test
+    scan_spec: optimization_infra/example_scan.yaml

@@ -97,6 +97,15 @@ def _build_report_text(
     prompt_nominal = sample_selection["selected_nominal_samples"]["prompt_diphoton"][0]
     prompt_alternatives = sample_selection["alternative_samples"].get("prompt_diphoton", [])
     signal_window = summary["runtime_defaults"]["signal_window_gev"]
+    analysis_implementation = summary["runtime_defaults"].get("analysis_implementation", {})
+    analysis_version = analysis_implementation.get("version", "round1_5cat")
+    analysis_selection = analysis_implementation.get("selection", "five_category_ptt")
+    analysis_description = analysis_implementation.get("description", "Higgs-to-diphoton analysis").rstrip(".")
+    analysis_intro = (
+        f"This run executes analysis version `{analysis_version}` (`{analysis_selection}`; "
+        f"{len(yields['categories'])} configured categories) from `{summary['source_summary']}`. "
+        f"Version note: {analysis_description}."
+    )
     blinded_plots = bool(blinding["plot_signal_window"])
     signal_window_label = f"{signal_window[0]:.0f}-{signal_window[1]:.0f} GeV"
     capped_categories = [
@@ -108,7 +117,7 @@ def _build_report_text(
 
     if observed["status"] in {"ok", "warning"}:
         introduction_summary = (
-            f"This run executes the five-category ATLAS open-data Higgs-to-diphoton measurement defined in `{summary['source_summary']}` "
+            f"{analysis_intro} "
             f"with a PyROOT/RooFit primary backend. The central measurement fit returns `mu = {fit_result['mu_hat']:.3f} +/- {fit_result['mu_uncertainty']:.3f}`, "
             f"the observed discovery significance from data is `Z = {observed['z_discovery']:.3f}` with `q0 = {observed['q0']:.3f}`, "
             f"and the Asimov expected sensitivity is `Z = {asimov['z_discovery']:.3f}` with `q0 = {asimov['q0']:.3f}`."
@@ -135,7 +144,7 @@ def _build_report_text(
         )
     else:
         introduction_summary = (
-            f"This run executes the five-category ATLAS open-data Higgs-to-diphoton measurement defined in `{summary['source_summary']}` with a PyROOT/RooFit primary backend. "
+            f"{analysis_intro} This run uses a PyROOT/RooFit primary backend. "
             f"Observed signal-region data remain blinded, so the central fit uses signal-plus-background Asimov pseudo-data and returns `mu = {fit_result['mu_hat']:.3f} +/- {fit_result['mu_uncertainty']:.3f}` as an expected-only reference. "
             f"The blinded expected discovery sensitivity from the same Asimov construction is `Z = {asimov['z_discovery']:.3f}` with `q0 = {asimov['q0']:.3f}`."
         )

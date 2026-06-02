@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from analysis.common import ensure_dir, read_json, stable_hash, write_json, write_text
 from analysis.config.load_summary import normalize_summary, write_regions_yaml
+from analysis.config.versions import apply_analysis_version
 from analysis.hists.histmaker import build_templates, process_sample
 from analysis.pipeline import (
     _apply_runtime_overrides,
@@ -73,6 +74,9 @@ def _init_context(
     outputs: Path,
     max_events: int | None,
     unblind_observed_significance: bool,
+    analysis_version: str | None,
+    section8_ads_path: Path | None,
+    section8_bdt_artifacts: Path | None,
 ) -> Context:
     outputs_path = ensure_dir(outputs)
     return {
@@ -82,6 +86,9 @@ def _init_context(
         "reports_dir": ensure_dir(outputs_path.parent / "reports"),
         "max_events": max_events,
         "unblind_observed_significance": unblind_observed_significance,
+        "analysis_version": analysis_version,
+        "section8_ads_path": section8_ads_path,
+        "section8_bdt_artifacts": section8_bdt_artifacts,
     }
 
 
@@ -115,6 +122,13 @@ def _summary(ctx: Context) -> None:
         normalized,
         unblind_observed_significance=bool(ctx["unblind_observed_significance"]),
     )
+    normalized["runtime_defaults"] = apply_analysis_version(
+        normalized["runtime_defaults"],
+        version_name=ctx.get("analysis_version"),
+        section8_ads_path=ctx.get("section8_ads_path"),
+        section8_bdt_artifacts=ctx.get("section8_bdt_artifacts"),
+    )
+    normalized["config_hash"] = stable_hash(normalized)
     ctx["summary"] = normalized
     ctx["summary_errors"] = errors
     _write_summary_products(normalized, errors, ctx["outputs_path"])
@@ -191,7 +205,11 @@ def _templates(ctx: Context) -> None:
 
 
 def _cutflow(ctx: Context) -> None:
-    cutflow_table, _, _ = build_cutflow_and_yields(ctx["processed_samples"], ctx["outputs_path"])
+    cutflow_table, _, _ = build_cutflow_and_yields(
+        ctx["processed_samples"],
+        ctx["summary"]["runtime_defaults"],
+        ctx["outputs_path"],
+    )
     ctx["cutflow_table"] = cutflow_table
 
 
@@ -223,7 +241,11 @@ def _plots(ctx: Context) -> None:
 
 
 def _review_artifacts(ctx: Context) -> None:
-    write_data_mc_discrepancy_artifacts(ctx["processed_samples"], ctx["outputs_path"])
+    write_data_mc_discrepancy_artifacts(
+        ctx["processed_samples"],
+        ctx["summary"]["runtime_defaults"],
+        ctx["outputs_path"],
+    )
     write_background_template_smoothing_artifacts(ctx["fit_context"], ctx["outputs_path"])
     write_mc_effective_lumi_check(
         ctx["registry"],
@@ -286,6 +308,9 @@ def run_modular_pipeline(
     outputs: Path,
     max_events: int | None = None,
     unblind_observed_significance: bool = False,
+    analysis_version: str | None = None,
+    section8_ads_path: Path | None = None,
+    section8_bdt_artifacts: Path | None = None,
     mask: set[str] | None = None,
     strict_mask: bool = False,
 ) -> Context:
@@ -300,6 +325,9 @@ def run_modular_pipeline(
         outputs=outputs,
         max_events=max_events,
         unblind_observed_significance=unblind_observed_significance,
+        analysis_version=analysis_version,
+        section8_ads_path=section8_ads_path,
+        section8_bdt_artifacts=section8_bdt_artifacts,
     )
     records: list[dict[str, Any]] = []
     write_state(ctx["outputs_path"], COMPONENTS, records=records, mask=mask)

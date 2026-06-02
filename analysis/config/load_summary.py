@@ -12,6 +12,11 @@ from analysis.config.summary_schema import validate_summary_schema
 
 
 DEFAULT_RUNTIME = {
+    "analysis_implementation": {
+        "version": "round1_5cat",
+        "selection": "five_category_ptt",
+        "description": "Original five-category pTt/VBF-enriched open-data pipeline.",
+    },
     "tree_name": "analysis",
     "target_lumi_fb": 36.1,
     "central_mc_lumi_fb": 36.1,
@@ -35,6 +40,10 @@ DEFAULT_RUNTIME = {
     "jet_selection": {
         "pt_min_gev": 25.0,
         "abs_eta_max": 4.5,
+    },
+    "category_ptt_boundaries_gev": {
+        "central": 60.0,
+        "rest": 60.0,
     },
     "histogramming": {
         "mass_bin_width_gev": 1.0,
@@ -92,6 +101,9 @@ def normalize_summary(summary: dict[str, Any], summary_path: Path) -> tuple[dict
     normalized = dict(summary)
     normalized["source_summary"] = str(summary_path)
     normalized["runtime_defaults"] = copy.deepcopy(DEFAULT_RUNTIME)
+    runtime_overrides = summary.get("runtime_defaults")
+    if isinstance(runtime_overrides, dict):
+        normalized["runtime_defaults"] = _deep_merge(normalized["runtime_defaults"], runtime_overrides)
     normalized["categories"] = _categories(summary)
     normalized["overlap_policy"] = {
         "default_allow_overlap": False,
@@ -122,6 +134,16 @@ def normalize_summary(summary: dict[str, Any], summary_path: Path) -> tuple[dict
     }
     normalized["config_hash"] = stable_hash(normalized)
     return normalized, errors
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = copy.deepcopy(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
 
 
 def write_regions_yaml(normalized: dict[str, Any], path: Path) -> Path:

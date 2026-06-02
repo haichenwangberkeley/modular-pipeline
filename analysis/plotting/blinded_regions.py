@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from analysis.common import ensure_dir, write_json
-from analysis.selections.engine import CATEGORY_ORDER
 from analysis.stats.models import background_candidate, pdf_to_curve
 
 PLOT_COLORS = {

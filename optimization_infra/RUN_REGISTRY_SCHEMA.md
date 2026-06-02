@@ -32,6 +32,8 @@ The run registry is an append-only JSON Lines file at `optimization_infra/runs.j
 - `human_or_agent_note`: string or null.
 - `git_state`: mapping with commit and dirty state.
 - `service_versions`: mapping of service IDs to versions.
+- `version_name`: descriptive round or candidate version name, when available.
+- `version_ref`: git tag, branch, or commit anchor, when available.
 
 ## Supported Run Types
 
@@ -49,3 +51,5 @@ The run registry is an append-only JSON Lines file at `optimization_infra/runs.j
 - Existing entries must not be rewritten by scan tools.
 - A run ID should be unique; duplicate run IDs are invalid unless a human explicitly marks a repair record.
 - Failed dry runs may be recorded if useful, but must set `failure_reason`.
+- Compact result artifacts such as plans, observations, summaries, version anchors, metric records, verifier status, and decision packets should be preserved under unique run or loop directories.
+- Large scientific outputs may be referenced by path and hash rather than copied into the registry.

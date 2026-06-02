@@ -68,6 +68,27 @@ Summarize improvements, deteriorations, and trade-offs
 - Unresolved scientific ambiguity blocks further work.
 - A human decision is required before further valid progress.
 
+## Bounded Agent Loop Mode
+
+A bounded agent loop may run for a fixed number of rounds only when all of the following are declared:
+
+- `max_rounds`.
+- Objective metric.
+- Allowed configuration surface.
+- Parent run or baseline.
+- Branch and strategy identifiers.
+- Stop-on-failure and escalation behavior.
+
+Each round must:
+
+- Read the prior round report or scan summary before selecting the next round.
+- Preserve a descriptive version anchor in `VERSION.yaml` and `VERSION.md`.
+- Preserve compact evidence artifacts instead of overwriting them.
+- Write `ROUND_REPORT.yaml` and `ROUND_REPORT.md`.
+- Create or update a decision packet when the next step needs human or reasoning-agent judgment.
+
+The loop must stop when `max_rounds` is reached, a verifier/invariant block occurs, a service change is required, or human approval is needed.
+
 ## Verifier Hooks
 
 The optimization framework must plan or run hooks for:

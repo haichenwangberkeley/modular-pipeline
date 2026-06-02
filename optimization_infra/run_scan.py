@@ -18,6 +18,7 @@ from optimization_infra.plan_candidate_run import (
     write_execution_plan,
     write_yaml,
 )
+from optimization_infra.version_round import git_state, make_version_name
 
 
 SUPPORTED_RUN_TYPES = {
@@ -64,6 +65,14 @@ def make_registry_entry(
     config_path: Path,
     plan: dict[str, Any],
 ) -> dict[str, Any]:
+    state = git_state(Path.cwd())
+    descriptor = ",".join(change["config_path"] for change in plan.get("changed_parameters", [])) or "no-config-change"
+    version_name = make_version_name(
+        round_id=run_id,
+        strategy_id=spec["strategy_id"],
+        objective=spec["objective_metric"],
+        descriptor=descriptor,
+    )
     return {
         "run_id": run_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -90,8 +99,10 @@ def make_registry_entry(
         "warnings": plan.get("invariant_violations", []),
         "failure_reason": "blocked_by_invariant" if plan.get("status") == "blocked" else None,
         "human_or_agent_note": "Infrastructure dry run; no scientific workflow launched.",
-        "git_state": {"commit": None, "dirty": None},
+        "git_state": state,
         "service_versions": {},
+        "version_name": version_name,
+        "version_ref": state["commit"],
     }
 
 

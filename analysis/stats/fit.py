@@ -10,14 +10,13 @@ import ROOT
 
 from analysis.common import ensure_dir, read_json, stable_hash, write_json
 from analysis.samples.registry import parse_mass_window
-from analysis.selections.engine import CATEGORY_ORDER
+from analysis.selections.engine import category_order
 from analysis.stats.models import (
     background_candidate,
     configure_mass_var,
     crystal_ball_pdf,
     fit_pdf,
     histogram_counts,
-    make_binned_counts_datahist,
     make_weighted_bin_center_dataset,
     make_weighted_dataset,
     pdf_to_curve,
@@ -34,16 +33,17 @@ def _concat(chunks: list[np.ndarray]) -> np.ndarray:
     return np.concatenate(chunks) if chunks else np.array([])
 
 
-def aggregate_processed_samples(processed_samples: list[dict]) -> dict[str, dict[str, dict[str, np.ndarray]]]:
+def aggregate_processed_samples(processed_samples: list[dict], cfg: dict[str, Any] | None = None) -> dict[str, dict[str, dict[str, np.ndarray]]]:
+    categories_in_use = category_order(cfg)
     aggregated: dict[str, dict[str, dict[str, list[np.ndarray]]]] = {
-        "data": {category: {"mgg": [], "weight": []} for category in CATEGORY_ORDER},
-        "signal": {category: {"mgg": [], "weight": []} for category in CATEGORY_ORDER},
-        "prompt_diphoton": {category: {"mgg": [], "weight": []} for category in CATEGORY_ORDER},
+        "data": {category: {"mgg": [], "weight": []} for category in categories_in_use},
+        "signal": {category: {"mgg": [], "weight": []} for category in categories_in_use},
+        "prompt_diphoton": {category: {"mgg": [], "weight": []} for category in categories_in_use},
     }
     for sample in processed_samples:
         if len(sample["events"].get("mgg", [])) == 0:
             continue
-        for category in CATEGORY_ORDER:
+        for category in categories_in_use:
             mask = sample["events"]["category"] == category
             if not np.any(mask):
                 continue
@@ -499,6 +499,44 @@ def _final_parameter_snapshot(final_models: dict[str, Any], shared_mu) -> dict[s
     return parameters
 
 
+def _combined_observed_dataset(name: str, common_mass, channel, category_context: dict[str, Any]):
+    observables = ROOT.RooArgSet(common_mass, channel)
+    dataset = ROOT.RooDataSet(name, name, observables)
+    for category, ctx in category_context.items():
+        masses = np.asarray(ctx["data_masses"], dtype=float)
+        valid = np.isfinite(masses) & (masses >= 105.0) & (masses <= 160.0)
+        channel.setLabel(category)
+        for mass in masses[valid]:
+            common_mass.setVal(float(mass))
+            dataset.add(observables)
+    return dataset
+
+
+def _combined_asimov_dataset(name: str, common_mass, channel, category_counts: dict[str, np.ndarray]):
+    finite_positive_counts = [
+        float(value)
+        for counts in category_counts.values()
+        for value in np.asarray(counts, dtype=float)
+        if np.isfinite(value) and value > 0.0
+    ]
+    max_count = max(finite_positive_counts, default=1.0)
+    weight = ROOT.RooRealVar(f"w_{name}", f"w_{name}", 0.0, -10.0 * max_count, 10.0 * max_count)
+    observables = ROOT.RooArgSet(common_mass, channel, weight)
+    dataset = ROOT.RooDataSet(name, name, observables, ROOT.RooFit.WeightVar(weight))
+    for category, counts in category_counts.items():
+        counts_arr = np.asarray(counts, dtype=float)
+        edges = np.linspace(105.0, 160.0, len(counts_arr) + 1)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+        channel.setLabel(category)
+        for center, count in zip(centers, counts_arr, strict=False):
+            if not np.isfinite(count) or count <= 0.0:
+                continue
+            common_mass.setVal(float(center))
+            weight.setVal(float(count))
+            dataset.add(observables, float(count))
+    return dataset
+
+
 def _measurement_dataset(
     *,
     category_context: dict[str, Any],
@@ -508,26 +546,16 @@ def _measurement_dataset(
     use_observed_data: bool,
 ) -> tuple[Any, str, dict[str, Any]]:
     if use_observed_data:
-        combined_import = {
-            category: make_weighted_dataset(f"data_{category}", common_mass, ctx["data_masses"])
-            for category, ctx in category_context.items()
-        }
-        combined_data = ROOT.RooDataSet(
-            "combData",
-            "combData",
-            ROOT.RooArgSet(common_mass, channel),
-            Index=channel,
-            Import=combined_import,
-        )
+        combined_data = _combined_observed_dataset("combData", common_mass, channel, category_context)
         return combined_data, "observed", {
             "status": "ok",
             "dataset_type": "observed",
-            "construction_mode": "selected_event_dataset",
+            "construction_mode": "selected_event_dataset_explicit_categories",
             "blinding_policy_applied": False,
             "categories": sorted(category_context.keys()),
         }
 
-    import_map = {}
+    category_counts = {}
     category_payload: dict[str, Any] = {}
     for category, ctx in category_context.items():
         signal_yield = float(final_models[category]["s_const"].getVal())
@@ -535,26 +563,20 @@ def _measurement_dataset(
         signal_counts = pdf_to_counts(final_models[category]["signal_pdf"], common_mass, signal_yield)
         background_counts = pdf_to_counts(final_models[category]["background_pdf"], common_mass, background_yield)
         total_counts = signal_counts + background_counts
-        import_map[category] = make_binned_counts_datahist(f"expected_{category}", common_mass, total_counts)
+        category_counts[category] = total_counts
         category_payload[category] = {
             "signal_counts": signal_counts.tolist(),
             "background_counts": background_counts.tolist(),
             "total_counts": total_counts.tolist(),
         }
 
-    combined_data = ROOT.RooDataHist(
-        "combData",
-        "combData",
-        ROOT.RooArgSet(common_mass, channel),
-        Index=channel,
-        Import=import_map,
-    )
+    combined_data = _combined_asimov_dataset("combData", common_mass, channel, category_counts)
     return combined_data, "asimov_expected", {
         "status": "ok",
         "dataset_type": "asimov_expected",
         "generation_hypothesis": "signal_plus_background",
         "mu_gen": 1.0,
-        "construction_mode": "binned_roodatahist",
+        "construction_mode": "weighted_bin_center_dataset_explicit_categories",
         "blinding_policy_applied": True,
         "categories": category_payload,
     }
@@ -562,7 +584,8 @@ def _measurement_dataset(
 
 def run_fit(processed_samples: list[dict], registry: list[dict], summary: dict, outputs: Path) -> dict:
     cfg = summary["runtime_defaults"]
-    aggregated = aggregate_processed_samples(processed_samples)
+    categories_in_use = category_order(cfg)
+    aggregated = aggregate_processed_samples(processed_samples, cfg)
     fit_dir = ensure_dir(outputs / "fit" / FIT_ID)
     roofit_dir = ensure_dir(fit_dir / "roofit_combined")
     prompt_sample = next(sample for sample in registry if sample["process_key"] == "prompt_diphoton" and sample["is_nominal"])
@@ -616,7 +639,7 @@ def run_fit(processed_samples: list[dict], registry: list[dict], summary: dict, 
     }
     category_context: dict[str, Any] = {}
 
-    for category in CATEGORY_ORDER:
+    for category in categories_in_use:
         signal_payload = aggregated["signal"][category]
         data_payload = aggregated["data"][category]
         template_payload = aggregated["prompt_diphoton"][category]
@@ -709,15 +732,31 @@ def run_fit(processed_samples: list[dict], registry: list[dict], summary: dict, 
             model_ctx["nbkg"].setConstant(False)
             for param in model_ctx["background_params"]:
                 param.setConstant("_fixed_" in param.GetName())
-        fit_result = fit_pdf(simultaneous, combined_data, weighted=False, extended=True)
+        fit_failure = None
+        try:
+            fit_result = fit_pdf(simultaneous, combined_data, weighted=True, extended=True)
+        except Exception as exc:
+            fit_result = None
+            fit_failure = f"{type(exc).__name__}: {exc}"
     else:
-        fit_result = fit_pdf(simultaneous, combined_data, extended=True)
+        fit_failure = None
+        try:
+            fit_result = fit_pdf(simultaneous, combined_data, extended=True)
+        except Exception as exc:
+            fit_result = None
+            fit_failure = f"{type(exc).__name__}: {exc}"
 
     workspace_root = fit_dir / "workspace.root"
     workspace = ROOT.RooWorkspace("w")
-    getattr(workspace, "import")(simultaneous)
-    getattr(workspace, "import")(combined_data)
-    workspace.writeToFile(str(workspace_root))
+    workspace_status = "ok"
+    workspace_error = None
+    try:
+        getattr(workspace, "import")(simultaneous)
+        getattr(workspace, "import")(combined_data)
+        workspace.writeToFile(str(workspace_root))
+    except Exception as exc:
+        workspace_status = "blocked"
+        workspace_error = f"{type(exc).__name__}: {exc}"
 
     fitted_category_yields = {}
     for category, model_ctx in final_models.items():
@@ -728,10 +767,14 @@ def run_fit(processed_samples: list[dict], registry: list[dict], summary: dict, 
     postfit_plot_payload = _model_plot_payload(final_models, common_mass, cfg["fit_mass_range_gev"])
 
     diagnostics = []
-    if fit_result.status() != 0:
+    if fit_result is None:
+        diagnostics.append(f"Combined measurement fit did not return a RooFitResult: {fit_failure or 'unknown failure'}.")
+    elif fit_result.status() != 0:
         diagnostics.append("RooFit returned non-zero fit_status for the combined measurement fit.")
-    if fit_result.covQual() < 2:
+    if fit_result is not None and fit_result.covQual() < 2:
         diagnostics.append("Combined measurement fit covariance quality is below the acceptable threshold of 2.")
+    if workspace_status != "ok":
+        diagnostics.append(f"Workspace writing failed: {workspace_error}.")
     capped_background_categories = sorted(
         category
         for category, choice in background_choice_artifact["categories"].items()
@@ -750,18 +793,20 @@ def run_fit(processed_samples: list[dict], registry: list[dict], summary: dict, 
         if category_info["category_id"] in category_context
     }
 
+    active_category_order = [category for category in categories_in_use if category in category_context]
+
     fit_summary = {
-        "status": "ok" if not diagnostics else "warning",
+        "status": "blocked" if fit_result is None else ("ok" if not diagnostics else "warning"),
         "fit_id": FIT_ID,
         "backend": "pyroot_roofit",
         "dataset_type": measurement_dataset_type,
         "observed_data_used_in_fit": measurement_dataset_type == "observed",
         "mu_hat": float(shared_mu.getVal()),
         "mu_uncertainty": float(shared_mu.getError()),
-        "min_nll": float(fit_result.minNll()),
-        "fit_status": int(fit_result.status()),
-        "cov_qual": int(fit_result.covQual()),
-        "categories": sorted(category_context.keys()),
+        "min_nll": float(fit_result.minNll()) if fit_result is not None else None,
+        "fit_status": int(fit_result.status()) if fit_result is not None else -1,
+        "cov_qual": int(fit_result.covQual()) if fit_result is not None else -1,
+        "categories": active_category_order,
         "configured_regions": list(summary["fit_regions"][FIT_ID]["regions"]),
         "inactive_regions": sorted(set(summary["fit_regions"][FIT_ID]["regions"]) - active_regions),
         "shared_mu": True,
@@ -778,13 +823,14 @@ def run_fit(processed_samples: list[dict], registry: list[dict], summary: dict, 
         ),
     }
     workspace_json = {
-        "status": "ok",
+        "status": workspace_status,
         "fit_id": FIT_ID,
-        "workspace_root": str(workspace_root),
+        "workspace_root": str(workspace_root) if workspace_status == "ok" else None,
         "workspace_hash": stable_hash(fit_summary),
-        "categories": sorted(category_context.keys()),
+        "categories": active_category_order,
         "backend": "pyroot_roofit",
         "dataset_type": measurement_dataset_type,
+        "error": workspace_error,
     }
     backend_artifact = {
         "status": "ok",

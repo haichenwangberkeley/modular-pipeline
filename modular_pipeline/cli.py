@@ -27,6 +27,12 @@ def main() -> None:
     run_parser.add_argument("--max-events", type=int)
     run_parser.add_argument("--unblind-observed-significance", action="store_true")
     run_parser.add_argument(
+        "--analysis-version",
+        help="Configured analysis implementation version, e.g. round1_5cat or round2_section8_bdt.",
+    )
+    run_parser.add_argument("--section8-ads", type=Path, help="Override Section 8 ADS JSON path for section8 analysis versions.")
+    run_parser.add_argument("--section8-bdt-artifacts", type=Path, help="Override trained Section 8 BDT artifact directory.")
+    run_parser.add_argument(
         "--mask",
         default="",
         help="Comma-separated component or group names to skip, e.g. plots,report or stats.",
@@ -72,6 +78,9 @@ def main() -> None:
         outputs=Path(args.outputs),
         max_events=args.max_events,
         unblind_observed_significance=args.unblind_observed_significance,
+        analysis_version=args.analysis_version,
+        section8_ads_path=args.section8_ads,
+        section8_bdt_artifacts=args.section8_bdt_artifacts,
         mask=parse_mask(args.mask),
         strict_mask=args.strict_mask,
     )

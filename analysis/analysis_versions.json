@@ -1,0 +1,23 @@
+{
+  "round1_5cat": {
+    "analysis_implementation": {
+      "version": "round1_5cat",
+      "selection": "five_category_ptt",
+      "description": "Original five-category pTt/VBF-enriched open-data pipeline."
+    }
+  },
+  "round2_section8_bdt": {
+    "analysis_implementation": {
+      "version": "round2_section8_bdt",
+      "selection": "section8_ads_bdt",
+      "description": "Section 8 ADS 31-category pipeline with supplemental XGBoost BDTs trained from anti-ID/anti-isolation controls."
+    },
+    "section8_ads": {
+      "ads_path": "/Users/haichenwang/Downloads/atlas_hgg_36fb_section8_ads.json",
+      "bdt_artifacts_dir": "/Users/haichenwang/Work/newpipeline/outputs_section8_ads_bdt_full_20260601T160032Z",
+      "trigger_policy": "input_preselected",
+      "boundary_mode": "optimized",
+      "category_id_style": "sanitized_label"
+    }
+  }
+}

@@ -88,3 +88,34 @@ Backward-Compatibility Assessment: Additive root-level infrastructure only. Exis
 Affected Consumers: Future optimization agents, human reviewers, reasoning-agent handoff workflows.
 Migration Note: None.
 Approval Status: Not required for additive infrastructure; required before any future science-changing optimization or service execution runner is enabled.
+
+## 2026-05-31 Round Versioning And Loop Driver
+
+Date: 2026-05-31
+Author: Codex
+Service ID: optimization_orchestrator
+Old Version: 0.1.0
+New Version: 0.1.0
+Change Class: Class B: Backward-compatible service extension
+Summary: Added descriptive version anchors for optimization rounds and a bounded dry-run loop driver that preserves per-round reports and decision packets.
+Motivation: Make each optimization round traceable to a descriptive version name, git state, compact evidence artifacts, and fixed-round loop control.
+Files Changed:
+
+- `optimization_infra/version_round.py`
+- `optimization_infra/run_optimization_loop.py`
+- `optimization_infra/loop_spec_schema.yaml`
+- `optimization_infra/example_loop.yaml`
+- `optimization_infra/RUN_REGISTRY_SCHEMA.md`
+- `optimization_infra/OPTIMIZATION_CONTROL_POLICY.md`
+- `optimization_infra/run_scan.py`
+- `runs/README.md`
+- `tests/test_optimization_infra.py`
+- `ledger/EXECUTABLE_SERVICES.yaml`
+- `ledger/CHANGELOG.md`
+
+Tests Run: `PYTHONPATH=<repo> python -m pytest -q tests`
+Baseline Configurations Tested: None; infrastructure tests use synthetic fixtures only.
+Backward-Compatibility Assessment: Additive extension only. Existing scientific code, physics-policy invariants, and scan planning behavior remain compatible.
+Affected Consumers: Future optimization agents, human reviewers, run-history inspection workflows.
+Migration Note: None.
+Approval Status: Not required for additive dry-run infrastructure; required before creating permanent git tags or executing scientific optimization loops.

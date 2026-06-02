@@ -557,9 +557,12 @@ services:
       - optimization_infra/run_scan.py
       - optimization_infra/summarize_scan.py
       - optimization_infra/create_decision_packet.py
+      - optimization_infra/version_round.py
+      - optimization_infra/run_optimization_loop.py
       - optimization_infra/workflow_graph.yaml
       - optimization_infra/artifact_manifest_schema.yaml
       - optimization_infra/scan_spec_schema.yaml
+      - optimization_infra/loop_spec_schema.yaml
     interface_type: python_and_cli
     inputs:
       - name: workflow_graph
@@ -597,6 +600,12 @@ services:
       - name: decision_packet
         type: yaml_and_markdown
         required: false
+      - name: version_anchor
+        type: yaml_and_markdown
+        required: false
+      - name: loop_summary
+        type: yaml_and_markdown
+        required: false
     consumers:
       - future_optimization_agents
       - human_review
@@ -606,10 +615,13 @@ services:
       - Do not reuse artifacts unless provenance, verifier, schema, service-version, upstream, config-subset, and invariant checks pass.
       - Do not allow observed-significance unblinding without recorded approval.
       - Preserve negative, ambiguous, suspicious, and invalid candidate records.
+      - Bounded loop mode must not exceed max_rounds and must preserve per-round reports.
+      - Descriptive version anchors must record git state and must not overwrite prior round evidence.
     extension_points:
       - Add executable runners once verifiers and baseline registry entries are established.
       - Add compatibility adapters for artifact schema migrations.
       - Add richer observation extraction from real cutflow, yield, shape, and fit artifacts.
+      - Add optional git tag creation after human approval.
     backward_compatibility:
       guarantee: >
         Existing scientific services and CLI entrypoints are untouched; optimizer
@@ -627,4 +639,4 @@ services:
       changelog_update_required: true
       compatibility_review_required: true
     notes:
-      - Current scan support creates candidate snapshots and dry-run plans only; it does not execute scientific workflows.
+      - Current scan and loop support creates candidate snapshots, version anchors, reports, and dry-run plans only; it does not execute scientific workflows.

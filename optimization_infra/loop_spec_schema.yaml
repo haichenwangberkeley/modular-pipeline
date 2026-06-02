@@ -1,0 +1,32 @@
+schema_id: optimization_loop_spec
+version: 0.1.0
+required_fields:
+  - loop_id
+  - objective_metric
+  - max_rounds
+  - rounds
+
+fields:
+  loop_id:
+    type: string
+  objective_metric:
+    type: string
+  max_rounds:
+    type: integer
+    minimum: 1
+  dry_run_only:
+    type: boolean
+  stop_on_blocked_plan:
+    type: boolean
+  rounds:
+    type: list
+    item_required_fields:
+      - round_id
+      - descriptor
+      - scan_spec
+
+rules:
+  - The loop runner must not exceed `max_rounds`.
+  - Each round must write a durable report and version anchor.
+  - Each round must preserve candidate execution plans and registry entries.
+  - The runner is report-driven infrastructure; scientific execution requires separate explicit approval.

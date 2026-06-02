@@ -12,7 +12,7 @@ from analysis.common import ensure_dir, read_json, write_json
 from analysis.io.readers import REQUIRED_BRANCHES, iterate_events, io_diagnostics
 from analysis.objects.jets import build_jets
 from analysis.objects.photons import build_photons
-from analysis.selections.engine import CATEGORY_ORDER, assign_categories, sideband_mask, signal_window_mask
+from analysis.selections.engine import assign_categories, category_order, sideband_mask, signal_window_mask
 
 
 CUT_STEPS = ["all_events", "two_photons", "pt_fraction", "mass_window", "categorized"]
@@ -38,7 +38,13 @@ def compute_norm_factor(sample: dict) -> float:
 
 
 def process_sample(sample: dict, cfg: dict, max_events: int | None = None, cache_dir: Path | None = None) -> dict:
+    if cfg.get("analysis_implementation", {}).get("selection") == "section8_ads_bdt":
+        from analysis.section8_ads.modular_adapter import process_sample_for_modular
+
+        return process_sample_for_modular(sample, cfg, max_events=max_events, cache_dir=cache_dir)
+
     sample = dict(sample)
+    categories_in_use = category_order(cfg)
     if sample["kind"] != "data":
         sample["norm_factor"] = compute_norm_factor(sample)
     output = {
@@ -90,13 +96,13 @@ def process_sample(sample: dict, cfg: dict, max_events: int | None = None, cache
             "mjj": jets["mjj"][mass_mask],
             "delta_eta_jj": jets["delta_eta_jj"][mass_mask],
         }
-        categories = assign_categories(features)
+        categories = assign_categories(features, cfg)
         categorized_mask = categories != "unassigned"
         if np.any(categorized_mask):
             output["cutflow"]["categorized"]["weighted"] += float(np.sum(selected_weights[mass_mask][categorized_mask]))
             output["cutflow"]["categorized"]["unweighted"] += int(np.sum(categorized_mask))
 
-        for category in CATEGORY_ORDER:
+        for category in categories_in_use:
             category_mask = categorized_mask & (categories == category)
             if not np.any(category_mask):
                 continue
@@ -142,6 +148,7 @@ def process_sample(sample: dict, cfg: dict, max_events: int | None = None, cache
 
 
 def build_templates(processed_samples: list[dict], cfg: dict, out_dir: Path) -> dict:
+    categories_in_use = category_order(cfg)
     edges = np.arange(
         cfg["fit_mass_range_gev"][0],
         cfg["fit_mass_range_gev"][1] + cfg["histogramming"]["mass_bin_width_gev"],
@@ -153,7 +160,7 @@ def build_templates(processed_samples: list[dict], cfg: dict, out_dir: Path) -> 
         if len(sample["events"].get("mgg", [])) == 0:
             templates["samples"][sample["sample_id"]] = sample_templates
             continue
-        for category in CATEGORY_ORDER:
+        for category in categories_in_use:
             mask = sample["events"]["category"] == category
             masses = sample["events"]["mgg"][mask]
             weights = sample["events"]["weight"][mask]

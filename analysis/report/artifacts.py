@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -9,7 +10,7 @@ import numpy as np
 from analysis.common import ensure_dir, read_json, stable_hash, utcnow_iso, write_json, write_text
 from analysis.hists.histmaker import CUT_STEPS
 from analysis.runtime import runtime_context
-from analysis.selections.engine import CATEGORY_ORDER
+from analysis.selections.engine import category_order
 from analysis.stats.fit import FIT_ID
 
 
@@ -97,7 +98,369 @@ def write_normalization_table(registry: list[dict], outputs: Path) -> dict[str, 
     return payload
 
 
-def build_cutflow_and_yields(processed_samples: list[dict], outputs: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+SECTION8_RELEVANT_PROCESS_ORDER = [
+    "data",
+    "ggh",
+    "vbf",
+    "wmh",
+    "wph",
+    "zh",
+    "ggzh",
+    "tth",
+    "thj",
+    "twh",
+    "prompt_diphoton",
+]
+
+SECTION8_DEBUG_VARIABLES = [
+    "mgg",
+    "pT_gammagamma",
+    "ptt",
+    "lead_pt",
+    "sublead_pt",
+    "lead_eta",
+    "sublead_eta",
+    "N_lep",
+    "N_jets_25",
+    "N_jets_30",
+    "N_central_jets_25",
+    "N_forward_jets_25",
+    "N_btag_25",
+    "MET",
+    "MET_significance",
+    "leading_jet_pT_30",
+    "mjj",
+    "delta_eta_jj",
+    "m_ll",
+    "pT_lepton_plus_MET",
+    "max_abs_photon_eta",
+]
+
+
+def _write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
+    ensure_dir(path.parent)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+def _section8_process_group(sample: dict[str, Any]) -> str | None:
+    if sample["kind"] == "data":
+        return "data"
+    if sample["analysis_role"] == "signal_nominal":
+        return str(sample["process_key"])
+    if sample["analysis_role"] == "background_nominal" and sample["process_key"] == "prompt_diphoton":
+        return "prompt_diphoton"
+    return None
+
+
+def _empty_process_row() -> dict[str, Any]:
+    return {
+        "kind": None,
+        "sample_ids": [],
+        "steps": {
+            step: {
+                "unweighted_events": 0,
+                "normalized_yield_36fb": 0.0,
+            }
+            for step in CUT_STEPS
+        },
+    }
+
+
+def _finite_summary(values: np.ndarray, weights: np.ndarray | None = None) -> dict[str, Any]:
+    values = np.asarray(values, dtype=float)
+    finite = np.isfinite(values)
+    values = values[finite]
+    weights_arr = np.asarray(weights, dtype=float)[finite] if weights is not None else np.ones(len(values), dtype=float)
+    if len(values) == 0:
+        return {
+            "entries": 0,
+            "normalized_yield_36fb": 0.0,
+            "mean": None,
+            "std": None,
+            "min": None,
+            "p10": None,
+            "p50": None,
+            "p90": None,
+            "max": None,
+        }
+    return {
+        "entries": int(len(values)),
+        "normalized_yield_36fb": float(np.sum(weights_arr)),
+        "mean": float(np.mean(values)),
+        "std": float(np.std(values)),
+        "min": float(np.min(values)),
+        "p10": float(np.quantile(values, 0.10)),
+        "p50": float(np.quantile(values, 0.50)),
+        "p90": float(np.quantile(values, 0.90)),
+        "max": float(np.max(values)),
+    }
+
+
+def _section8_cutflow_markdown(payload: dict[str, Any]) -> str:
+    rows = [
+        "| Process | Kind | Diphoton selection yield | Categorized yield | Categorized events | Category/diphoton eff. |",
+        "| --- | --- | ---: | ---: | ---: | ---: |",
+    ]
+    for process in payload["process_order"]:
+        process_payload = payload["processes"].get(process)
+        if not process_payload:
+            continue
+        diphoton = process_payload["steps"]["mass_window"]["normalized_yield_36fb"]
+        categorized = process_payload["steps"]["categorized"]["normalized_yield_36fb"]
+        categorized_events = process_payload["steps"]["categorized"]["unweighted_events"]
+        eff = categorized / diphoton if diphoton else 0.0
+        rows.append(
+            f"| `{process}` | {process_payload['kind']} | {diphoton:.6g} | {categorized:.6g} | {categorized_events} | {eff:.6f} |"
+        )
+
+    category_rows = [
+        "| Category | BDT required | Data entries | Prompt diphoton yield | Total signal yield | m_yy data median | m_yy prompt median |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for category, category_payload in payload["category_yields"].items():
+        per_process = category_payload["processes"]
+        data = per_process.get("data", {})
+        prompt = per_process.get("prompt_diphoton", {})
+        signal_yield = sum(
+            float(process_payload["normalized_yield_36fb"])
+            for process, process_payload in per_process.items()
+            if process not in {"data", "prompt_diphoton"}
+        )
+        data_median = data.get("mgg", {}).get("p50")
+        prompt_median = prompt.get("mgg", {}).get("p50")
+        data_median_text = f"{data_median:.3f}" if data_median is not None else "-"
+        prompt_median_text = f"{prompt_median:.3f}" if prompt_median is not None else "-"
+        category_rows.append(
+            f"| `{category}` | {category_payload['bdt_required']} | {data.get('unweighted_events', 0)} | "
+            f"{prompt.get('normalized_yield_36fb', 0.0):.6g} | {signal_yield:.6g} | {data_median_text} | {prompt_median_text} |"
+        )
+
+    return "\n\n".join(
+        [
+            "# Section 8 Process Cutflow And Category Debug",
+            (
+                "This artifact is produced for the configurable `section8_ads_bdt` analysis version. "
+                "MC yields are normalized to 36.1 fb^-1 using the sample weights in the ntuples. "
+                "Data rows report observed event counts with unit weights."
+            ),
+            (
+                f"`diphoton_selection_step = {payload['diphoton_selection_step']}` and "
+                f"`category_definition_step = {payload['category_definition_step']}`."
+            ),
+            "## Process Cutflow Summary",
+            "\n".join(rows),
+            "## Category Debug Summary",
+            "\n".join(category_rows),
+            "## Debugging Note",
+            (
+                "For `m_yy` shape debugging, start with rows where `BDT required` is `False`. "
+                "Those categories are assigned from object counts and directly reconstructed kinematic variables, "
+                "so discrepancies there point first to object selection, derived variables, or category priority."
+            ),
+        ]
+    )
+
+
+def build_section8_process_cutflow_artifacts(processed_samples: list[dict], cfg: dict[str, Any], outputs: Path) -> dict[str, Any] | None:
+    if cfg.get("analysis_implementation", {}).get("selection") != "section8_ads_bdt":
+        return None
+
+    from analysis.section8_ads.categories import BDT_DEPENDENT_CATEGORIES, NON_BDT_CATEGORIES
+    from analysis.selections.engine import section8_category_id
+
+    categories_in_use = category_order(cfg)
+    bdt_category_ids = {section8_category_id(category) for category in BDT_DEPENDENT_CATEGORIES}
+    non_bdt_category_ids = {section8_category_id(category) for category in NON_BDT_CATEGORIES}
+    processes: dict[str, Any] = {}
+    category_yields: dict[str, Any] = {
+        category: {
+            "bdt_required": category in bdt_category_ids,
+            "debug_priority": "start_here_no_bdt" if category in non_bdt_category_ids else "bdt_dependent_later",
+            "processes": {},
+        }
+        for category in categories_in_use
+    }
+    variable_debug: dict[str, Any] = {
+        category: {"processes": {}}
+        for category in categories_in_use
+        if category in non_bdt_category_ids
+    }
+
+    for sample in processed_samples:
+        group = _section8_process_group(sample)
+        if group is None:
+            continue
+        processes.setdefault(group, _empty_process_row())
+        processes[group]["kind"] = sample["kind"] if sample["kind"] != "background" else sample["process_key"]
+        processes[group]["sample_ids"].append(sample["sample_id"])
+        for step in CUT_STEPS:
+            processes[group]["steps"][step]["unweighted_events"] += int(sample["cutflow"][step]["unweighted"])
+            processes[group]["steps"][step]["normalized_yield_36fb"] += float(sample["cutflow"][step]["weighted"])
+
+        events = sample.get("events", {})
+        if len(events.get("mgg", [])) == 0:
+            continue
+        weights = np.asarray(events["weight"], dtype=float)
+        categories = np.asarray(events["category"], dtype=str)
+        sideband = np.asarray(events.get("is_sideband", np.zeros(len(categories), dtype=bool)), dtype=bool)
+        signal_window = np.asarray(events.get("is_signal_window", np.zeros(len(categories), dtype=bool)), dtype=bool)
+        for category in categories_in_use:
+            mask = categories == category
+            if not np.any(mask):
+                continue
+            category_process = category_yields[category]["processes"].setdefault(
+                group,
+                {
+                    "unweighted_events": 0,
+                    "normalized_yield_36fb": 0.0,
+                    "sideband_yield_36fb": 0.0,
+                    "signal_window_yield_36fb": 0.0,
+                    "_mgg_values": [],
+                    "_mgg_weights": [],
+                },
+            )
+            category_process["unweighted_events"] += int(np.sum(mask))
+            category_process["normalized_yield_36fb"] += float(np.sum(weights[mask]))
+            category_process["sideband_yield_36fb"] += float(np.sum(weights[mask & sideband]))
+            category_process["signal_window_yield_36fb"] += float(np.sum(weights[mask & signal_window]))
+            category_process["_mgg_values"].append(np.asarray(events["mgg"])[mask])
+            category_process["_mgg_weights"].append(weights[mask])
+
+            if category in variable_debug:
+                debug_process = variable_debug[category]["processes"].setdefault(group, {"variables": {}})
+                for variable in SECTION8_DEBUG_VARIABLES:
+                    if variable not in events:
+                        continue
+                    variable_payload = debug_process["variables"].setdefault(variable, {"_values": [], "_weights": []})
+                    variable_payload["_values"].append(np.asarray(events[variable])[mask])
+                    variable_payload["_weights"].append(weights[mask])
+
+    for category_payload in category_yields.values():
+        for process_payload in category_payload["processes"].values():
+            values = np.concatenate(process_payload.pop("_mgg_values")) if process_payload.get("_mgg_values") else np.array([])
+            weights = np.concatenate(process_payload.pop("_mgg_weights")) if process_payload.get("_mgg_weights") else np.array([])
+            process_payload["mgg"] = _finite_summary(values, weights)
+
+    for category_payload in variable_debug.values():
+        for process_payload in category_payload["processes"].values():
+            for variable, variable_payload in process_payload["variables"].items():
+                values = np.concatenate(variable_payload.pop("_values")) if variable_payload.get("_values") else np.array([])
+                weights = np.concatenate(variable_payload.pop("_weights")) if variable_payload.get("_weights") else np.array([])
+                process_payload["variables"][variable] = _finite_summary(values, weights)
+
+    process_order = [process for process in SECTION8_RELEVANT_PROCESS_ORDER if process in processes]
+    payload = {
+        "status": "ok",
+        "analysis_version": cfg.get("analysis_implementation", {}).get("version"),
+        "target_lumi_fb": float(cfg["target_lumi_fb"]),
+        "diphoton_selection_step": "mass_window",
+        "category_definition_step": "categorized",
+        "steps": list(CUT_STEPS),
+        "process_order": process_order,
+        "processes": {process: processes[process] for process in process_order},
+        "category_yields": category_yields,
+        "non_bdt_category_debug": {
+            "status": "ok",
+            "categories": variable_debug,
+            "recommended_first_debug_categories": [category for category in categories_in_use if category in non_bdt_category_ids],
+            "variables": SECTION8_DEBUG_VARIABLES,
+        },
+        "bdt_dependent_categories": sorted(bdt_category_ids),
+        "non_bdt_categories": sorted(non_bdt_category_ids),
+    }
+
+    cutflow_rows = []
+    for process in process_order:
+        process_payload = payload["processes"][process]
+        previous_yield = None
+        diphoton_yield = process_payload["steps"]["mass_window"]["normalized_yield_36fb"]
+        for step in CUT_STEPS:
+            step_payload = process_payload["steps"][step]
+            current_yield = float(step_payload["normalized_yield_36fb"])
+            cutflow_rows.append(
+                {
+                    "process": process,
+                    "kind": process_payload["kind"],
+                    "step": step,
+                    "unweighted_events": int(step_payload["unweighted_events"]),
+                    "normalized_yield_36fb": current_yield,
+                    "efficiency_from_previous_weighted": current_yield / previous_yield if previous_yield else "",
+                    "efficiency_from_diphoton_selection_weighted": current_yield / diphoton_yield if diphoton_yield else "",
+                }
+            )
+            previous_yield = current_yield
+
+    category_rows = []
+    for category, category_payload in category_yields.items():
+        for process, process_payload in category_payload["processes"].items():
+            mgg = process_payload.get("mgg", {})
+            category_rows.append(
+                {
+                    "category": category,
+                    "bdt_required": category_payload["bdt_required"],
+                    "debug_priority": category_payload["debug_priority"],
+                    "process": process,
+                    "unweighted_events": process_payload["unweighted_events"],
+                    "normalized_yield_36fb": process_payload["normalized_yield_36fb"],
+                    "sideband_yield_36fb": process_payload["sideband_yield_36fb"],
+                    "signal_window_yield_36fb": process_payload["signal_window_yield_36fb"],
+                    "mgg_mean": mgg.get("mean"),
+                    "mgg_p50": mgg.get("p50"),
+                    "mgg_p10": mgg.get("p10"),
+                    "mgg_p90": mgg.get("p90"),
+                }
+            )
+
+    report_dir = ensure_dir(outputs / "report")
+    write_json(payload, report_dir / "section8_process_cutflow.json")
+    _write_csv(
+        report_dir / "section8_process_cutflow.csv",
+        cutflow_rows,
+        [
+            "process",
+            "kind",
+            "step",
+            "unweighted_events",
+            "normalized_yield_36fb",
+            "efficiency_from_previous_weighted",
+            "efficiency_from_diphoton_selection_weighted",
+        ],
+    )
+    _write_csv(
+        report_dir / "section8_category_process_yields.csv",
+        category_rows,
+        [
+            "category",
+            "bdt_required",
+            "debug_priority",
+            "process",
+            "unweighted_events",
+            "normalized_yield_36fb",
+            "sideband_yield_36fb",
+            "signal_window_yield_36fb",
+            "mgg_mean",
+            "mgg_p50",
+            "mgg_p10",
+            "mgg_p90",
+        ],
+    )
+    write_text(_section8_cutflow_markdown(payload), report_dir / "section8_process_cutflow.md")
+    payload["artifacts"] = {
+        "json": str(report_dir / "section8_process_cutflow.json"),
+        "cutflow_csv": str(report_dir / "section8_process_cutflow.csv"),
+        "category_csv": str(report_dir / "section8_category_process_yields.csv"),
+        "markdown": str(report_dir / "section8_process_cutflow.md"),
+    }
+    write_json(payload, report_dir / "section8_process_cutflow.json")
+    return payload
+
+
+def build_cutflow_and_yields(processed_samples: list[dict], cfg: dict[str, Any], outputs: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    categories_in_use = category_order(cfg)
     aggregated = {
         step: {
             "data_unweighted": 0,
@@ -113,7 +476,7 @@ def build_cutflow_and_yields(processed_samples: list[dict], outputs: Path) -> tu
             "prompt_diphoton_yield": 0.0,
             "signal_yield": 0.0,
         }
-        for category in CATEGORY_ORDER
+        for category in categories_in_use
     }
     for sample in processed_samples:
         sample_summaries.append(
@@ -135,7 +498,7 @@ def build_cutflow_and_yields(processed_samples: list[dict], outputs: Path) -> tu
                 aggregated[step]["prompt_diphoton_weighted"] += float(sample["cutflow"][step]["weighted"])
         if len(sample["events"].get("mgg", [])) == 0:
             continue
-        for category in CATEGORY_ORDER:
+        for category in categories_in_use:
             mask = sample["events"]["category"] == category
             if sample["kind"] == "data":
                 category_yields[category]["data_entries"] += int(np.sum(mask))
@@ -150,6 +513,10 @@ def build_cutflow_and_yields(processed_samples: list[dict], outputs: Path) -> tu
     write_json(cutflow_table, outputs / "report" / "cutflow_table.json")
     write_json(yields, outputs / "report" / "yields_by_category.json")
     write_json(processed_manifest, outputs / "hists" / "processed_samples.json")
+    section8_process_cutflow = build_section8_process_cutflow_artifacts(processed_samples, cfg, outputs)
+    if section8_process_cutflow is not None:
+        cutflow_table["section8_process_cutflow"] = section8_process_cutflow["artifacts"]
+        write_json(cutflow_table, outputs / "report" / "cutflow_table.json")
     return cutflow_table, yields, processed_manifest
 
 
@@ -220,9 +587,10 @@ def write_mc_effective_lumi_check(
     return payload
 
 
-def write_data_mc_discrepancy_artifacts(processed_samples: list[dict], outputs: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+def write_data_mc_discrepancy_artifacts(processed_samples: list[dict], cfg: dict[str, Any], outputs: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    categories_in_use = category_order(cfg)
     findings = []
-    for category in CATEGORY_ORDER:
+    for category in categories_in_use:
         data_count = 0
         mc_yield = 0.0
         for sample in processed_samples:
