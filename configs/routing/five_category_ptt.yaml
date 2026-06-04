@@ -1,0 +1,62 @@
+routing:
+  mode: ordered_first_match
+description: Original five-category pTt/VBF-enriched open-data routing.
+categories:
+  - id: two_jet_vbf_enriched
+    label: Two-jet VBF enriched
+    priority: 10
+    required_inputs: [n_jets, mjj, delta_eta_jj]
+    select_when:
+      all:
+        - {field: n_jets, op: ">=", value: 2}
+        - {field: mjj, op: ">", value: 400.0}
+        - {field: delta_eta_jj, op: ">", value: 2.8}
+    reason: at least two jets with high dijet mass and rapidity separation
+  - id: central_low_ptt
+    label: Central low pTt
+    priority: 20
+    required_inputs: [lead_eta_abs, sublead_eta_abs, ptt]
+    eligible_when:
+      all:
+        - {field: lead_eta_abs, op: "<", value: 0.75}
+        - {field: sublead_eta_abs, op: "<", value: 0.75}
+    select_when:
+      all:
+        - {field: ptt, op: "<", value: 60.0}
+    reason: central photons with low pTt
+  - id: central_high_ptt
+    label: Central high pTt
+    priority: 30
+    required_inputs: [lead_eta_abs, sublead_eta_abs, ptt]
+    eligible_when:
+      all:
+        - {field: lead_eta_abs, op: "<", value: 0.75}
+        - {field: sublead_eta_abs, op: "<", value: 0.75}
+    select_when:
+      all:
+        - {field: ptt, op: ">=", value: 60.0}
+    reason: central photons with high pTt
+  - id: rest_low_ptt
+    label: Rest low pTt
+    priority: 40
+    required_inputs: [lead_eta_abs, sublead_eta_abs, ptt]
+    eligible_when:
+      any:
+        - {field: lead_eta_abs, op: ">=", value: 0.75}
+        - {field: sublead_eta_abs, op: ">=", value: 0.75}
+    select_when:
+      all:
+        - {field: ptt, op: "<", value: 60.0}
+    reason: non-central photons with low pTt
+  - id: rest_high_ptt
+    label: Rest high pTt
+    priority: 50
+    required_inputs: [lead_eta_abs, sublead_eta_abs, ptt]
+    eligible_when:
+      any:
+        - {field: lead_eta_abs, op: ">=", value: 0.75}
+        - {field: sublead_eta_abs, op: ">=", value: 0.75}
+    select_when:
+      all:
+        - {field: ptt, op: ">=", value: 60.0}
+    reason: non-central photons with high pTt

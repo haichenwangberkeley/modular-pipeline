@@ -1,0 +1,355 @@
+routing:
+  mode: ordered_first_match
+  active_when:
+    all:
+      - {field: baseline_selected, op: "!=", value: 0}
+description: Section 8 ADS 31-category ordered first-match routing with supplemental BDT scores.
+categories:
+  - id: tH_lep_0fwd
+    label: tH lep 0fwd
+    priority: 10
+    required_inputs: [N_lep, N_central_jets_25, N_btag_25, N_forward_jets_25]
+    select_when:
+      all:
+        - {field: N_lep, op: "==", value: 1}
+        - {field: N_central_jets_25, op: "<=", value: 3}
+        - {field: N_btag_25, op: ">=", value: 1}
+        - {field: N_forward_jets_25, op: "==", value: 0}
+    reason: single lepton top-associated with no forward jet
+  - id: tH_lep_1fwd
+    label: tH lep 1fwd
+    priority: 20
+    required_inputs: [N_lep, N_central_jets_25, N_btag_25, N_forward_jets_25]
+    select_when:
+      all:
+        - {field: N_lep, op: "==", value: 1}
+        - {field: N_central_jets_25, op: "<=", value: 4}
+        - {field: N_btag_25, op: ">=", value: 1}
+        - {field: N_forward_jets_25, op: ">=", value: 1}
+    reason: single lepton top-associated with forward jet
+  - id: ttH_lep
+    label: ttH lep
+    priority: 30
+    required_inputs: [N_lep, N_central_jets_25, N_btag_25, Z_ll_veto]
+    select_when:
+      all:
+        - {field: N_lep, op: ">=", value: 1}
+        - {field: N_central_jets_25, op: ">=", value: 2}
+        - {field: N_btag_25, op: ">=", value: 1}
+        - {field: Z_ll_veto, op: "!=", value: 0}
+    reason: leptonic ttH topology with Z veto
+  - id: ttH_had_BDT1
+    label: ttH had BDT1
+    priority: 40
+    required_inputs: [N_lep, N_jets_30, N_btag_25, BDT_ttH]
+    eligible_when: &tth_had_base
+      all:
+        - {field: N_lep, op: "==", value: 0}
+        - {field: N_jets_30, op: ">=", value: 3}
+        - {field: N_btag_25, op: ">=", value: 1}
+    select_when:
+      all:
+        - {field: BDT_ttH, op: ">", value: 0.92}
+    block_if_missing: [BDT_ttH]
+    reason: supplemental BDT_ttH highest-score bin
+    block_reason: BDT_ttH missing for ttH had categories
+  - id: ttH_had_BDT2
+    label: ttH had BDT2
+    priority: 50
+    required_inputs: [N_lep, N_jets_30, N_btag_25, BDT_ttH]
+    eligible_when: *tth_had_base
+    select_when:
+      all:
+        - {field: BDT_ttH, op: ">", value: 0.83}
+        - {field: BDT_ttH, op: "<=", value: 0.92}
+    block_if_missing: [BDT_ttH]
+    reason: supplemental BDT_ttH bin 2
+    block_reason: BDT_ttH missing for ttH had categories
+  - id: ttH_had_BDT3
+    label: ttH had BDT3
+    priority: 60
+    required_inputs: [N_lep, N_jets_30, N_btag_25, BDT_ttH]
+    eligible_when: *tth_had_base
+    select_when:
+      all:
+        - {field: BDT_ttH, op: ">", value: 0.79}
+        - {field: BDT_ttH, op: "<=", value: 0.83}
+    block_if_missing: [BDT_ttH]
+    reason: supplemental BDT_ttH bin 3
+    block_reason: BDT_ttH missing for ttH had categories
+  - id: ttH_had_BDT4
+    label: ttH had BDT4
+    priority: 70
+    required_inputs: [N_lep, N_jets_30, N_btag_25, BDT_ttH]
+    eligible_when: *tth_had_base
+    select_when:
+      all:
+        - {field: BDT_ttH, op: ">", value: 0.52}
+        - {field: BDT_ttH, op: "<=", value: 0.79}
+    block_if_missing: [BDT_ttH]
+    reason: supplemental BDT_ttH bin 4
+    block_reason: BDT_ttH missing for ttH had categories
+  - id: tH_had_4j1b
+    label: tH had 4j1b
+    priority: 80
+    required_inputs: [N_lep, N_central_jets_25, N_btag_25]
+    select_when:
+      all:
+        - {field: N_lep, op: "==", value: 0}
+        - {field: N_central_jets_25, op: "==", value: 4}
+        - {field: N_btag_25, op: "==", value: 1}
+    reason: hadronic tH 4j1b topology
+  - id: tH_had_4j2b
+    label: tH had 4j2b
+    priority: 90
+    required_inputs: [N_lep, N_central_jets_25, N_btag_25]
+    select_when:
+      all:
+        - {field: N_lep, op: "==", value: 0}
+        - {field: N_central_jets_25, op: "==", value: 4}
+        - {field: N_btag_25, op: ">=", value: 2}
+    reason: hadronic tH 4j2b topology
+  - id: VH_dilep
+    label: VH dilep
+    priority: 100
+    required_inputs: [N_lep, m_ll]
+    select_when:
+      all:
+        - {field: N_lep, op: ">=", value: 2}
+        - finite: {field: m_ll}
+        - {field: m_ll, op: ">=", value: 70.0}
+        - {field: m_ll, op: "<=", value: 110.0}
+    reason: same-flavor opposite-sign dilepton candidate
+  - id: VH_lep_High
+    label: VH lep High
+    priority: 110
+    required_inputs: [N_lep, m_e_gamma_veto, pT_lepton_plus_MET]
+    select_when:
+      all:
+        - {field: N_lep, op: "==", value: 1}
+        - {field: m_e_gamma_veto, op: "!=", value: 0}
+        - finite: {field: pT_lepton_plus_MET}
+        - {field: pT_lepton_plus_MET, op: ">", value: 150.0}
+    reason: single-lepton VH high pT(l+MET)
+  - id: VH_lep_Low
+    label: VH lep Low
+    priority: 120
+    required_inputs: [N_lep, m_e_gamma_veto, pT_lepton_plus_MET, MET_significance]
+    select_when:
+      all:
+        - {field: N_lep, op: "==", value: 1}
+        - {field: m_e_gamma_veto, op: "!=", value: 0}
+        - finite: {field: pT_lepton_plus_MET}
+        - {field: pT_lepton_plus_MET, op: "<=", value: 150.0}
+        - finite: {field: MET_significance}
+        - {field: MET_significance, op: ">", value: 1.0}
+    reason: single-lepton VH low pT(l+MET)
+  - id: VH_MET_High
+    label: VH MET High
+    priority: 130
+    required_inputs: [MET, MET_significance]
+    select_when:
+      any:
+        - all:
+            - {field: MET, op: ">", value: 150.0}
+            - {field: MET, op: "<", value: 250.0}
+            - {field: MET_significance, op: ">", value: 9.0}
+        - {field: MET, op: ">", value: 250.0}
+    reason: MET-enriched VH category
+  - id: VH_MET_Low
+    label: VH MET Low
+    priority: 140
+    required_inputs: [MET, MET_significance]
+    select_when:
+      all:
+        - {field: MET, op: ">", value: 80.0}
+        - {field: MET, op: "<", value: 150.0}
+        - {field: MET_significance, op: ">", value: 8.0}
+    reason: lower-MET VH category
+  - id: jet_BSM
+    label: jet BSM
+    priority: 150
+    required_inputs: [leading_jet_pT_30]
+    select_when:
+      all:
+        - {field: leading_jet_pT_30, op: ">", value: 200.0}
+    reason: boosted leading jet category
+  - id: VH_had_tight
+    label: VH had tight
+    priority: 160
+    required_inputs: [m_jj_30, BDT_VH]
+    eligible_when: &vh_had_base
+      all:
+        - finite: {field: m_jj_30}
+        - {field: m_jj_30, op: ">", value: 60.0}
+        - {field: m_jj_30, op: "<", value: 120.0}
+    select_when:
+      all:
+        - {field: BDT_VH, op: ">", value: 0.78}
+    block_if_missing: [BDT_VH]
+    reason: supplemental BDT_VH tight bin
+    block_reason: BDT_VH missing for hadronic VH categories
+  - id: VH_had_loose
+    label: VH had loose
+    priority: 170
+    required_inputs: [m_jj_30, BDT_VH]
+    eligible_when: *vh_had_base
+    select_when:
+      all:
+        - {field: BDT_VH, op: ">", value: 0.35}
+        - {field: BDT_VH, op: "<=", value: 0.78}
+    block_if_missing: [BDT_VH]
+    reason: supplemental BDT_VH loose bin
+    block_reason: BDT_VH missing for hadronic VH categories
+  - id: VBF_tight_high_pT_Hjj
+    label: VBF tight, high pT_Hjj
+    priority: 180
+    required_inputs: [N_jets_30, abs_delta_eta_jj_30, VBF_centrality, pT_Hjj_30, BDT_VBF]
+    eligible_when: &vbf_high_base
+      all:
+        - {field: N_jets_30, op: ">=", value: 2}
+        - {field: abs_delta_eta_jj_30, op: ">", value: 2.0}
+        - {field: VBF_centrality, op: "<", value: 5.0}
+        - finite: {field: pT_Hjj_30}
+        - {field: pT_Hjj_30, op: ">", value: 25.0}
+    select_when:
+      all:
+        - {field: BDT_VBF, op: ">", value: 0.47}
+    block_if_missing: [BDT_VBF]
+    reason: supplemental BDT_VBF high-pT tight bin
+    block_reason: BDT_VBF missing for VBF categories
+  - id: VBF_loose_high_pT_Hjj
+    label: VBF loose, high pT_Hjj
+    priority: 190
+    required_inputs: [N_jets_30, abs_delta_eta_jj_30, VBF_centrality, pT_Hjj_30, BDT_VBF]
+    eligible_when: *vbf_high_base
+    select_when:
+      all:
+        - {field: BDT_VBF, op: ">", value: -0.32}
+        - {field: BDT_VBF, op: "<=", value: 0.47}
+    block_if_missing: [BDT_VBF]
+    reason: supplemental BDT_VBF high-pT loose bin
+    block_reason: BDT_VBF missing for VBF categories
+  - id: VBF_tight_low_pT_Hjj
+    label: VBF tight, low pT_Hjj
+    priority: 200
+    required_inputs: [N_jets_30, abs_delta_eta_jj_30, VBF_centrality, pT_Hjj_30, BDT_VBF]
+    eligible_when: &vbf_low_base
+      all:
+        - {field: N_jets_30, op: ">=", value: 2}
+        - {field: abs_delta_eta_jj_30, op: ">", value: 2.0}
+        - {field: VBF_centrality, op: "<", value: 5.0}
+        - finite: {field: pT_Hjj_30}
+        - {field: pT_Hjj_30, op: "<=", value: 25.0}
+    select_when:
+      all:
+        - {field: BDT_VBF, op: ">", value: 0.87}
+    block_if_missing: [BDT_VBF]
+    reason: supplemental BDT_VBF low-pT tight bin
+    block_reason: BDT_VBF missing for VBF categories
+  - id: VBF_loose_low_pT_Hjj
+    label: VBF loose, low pT_Hjj
+    priority: 210
+    required_inputs: [N_jets_30, abs_delta_eta_jj_30, VBF_centrality, pT_Hjj_30, BDT_VBF]
+    eligible_when: *vbf_low_base
+    select_when:
+      all:
+        - {field: BDT_VBF, op: ">", value: 0.26}
+        - {field: BDT_VBF, op: "<=", value: 0.87}
+    block_if_missing: [BDT_VBF]
+    reason: supplemental BDT_VBF low-pT loose bin
+    block_reason: BDT_VBF missing for VBF categories
+  - id: ggH_2J_BSM
+    label: ggH 2J BSM
+    priority: 220
+    required_inputs: [N_jets_30, pT_gammagamma]
+    select_when:
+      all:
+        - {field: N_jets_30, op: ">=", value: 2}
+        - {field: pT_gammagamma, op: ">=", value: 200.0}
+    reason: untagged ggH 2-jet BSM bin
+  - id: ggH_2J_High
+    label: ggH 2J High
+    priority: 230
+    required_inputs: [N_jets_30, pT_gammagamma]
+    select_when:
+      all:
+        - {field: N_jets_30, op: ">=", value: 2}
+        - {field: pT_gammagamma, op: ">=", value: 120.0}
+        - {field: pT_gammagamma, op: "<", value: 200.0}
+    reason: untagged ggH 2-jet high pT
+  - id: ggH_2J_Med
+    label: ggH 2J Med
+    priority: 240
+    required_inputs: [N_jets_30, pT_gammagamma]
+    select_when:
+      all:
+        - {field: N_jets_30, op: ">=", value: 2}
+        - {field: pT_gammagamma, op: ">=", value: 60.0}
+        - {field: pT_gammagamma, op: "<", value: 120.0}
+    reason: untagged ggH 2-jet medium pT
+  - id: ggH_2J_Low
+    label: ggH 2J Low
+    priority: 250
+    required_inputs: [N_jets_30, pT_gammagamma]
+    select_when:
+      all:
+        - {field: N_jets_30, op: ">=", value: 2}
+        - {field: pT_gammagamma, op: "<", value: 60.0}
+    reason: untagged ggH 2-jet low pT
+  - id: ggH_1J_BSM
+    label: ggH 1J BSM
+    priority: 260
+    required_inputs: [N_jets_30, pT_gammagamma]
+    select_when:
+      all:
+        - {field: N_jets_30, op: "==", value: 1}
+        - {field: pT_gammagamma, op: ">=", value: 200.0}
+    reason: untagged ggH 1-jet BSM bin
+  - id: ggH_1J_High
+    label: ggH 1J High
+    priority: 270
+    required_inputs: [N_jets_30, pT_gammagamma]
+    select_when:
+      all:
+        - {field: N_jets_30, op: "==", value: 1}
+        - {field: pT_gammagamma, op: ">=", value: 120.0}
+        - {field: pT_gammagamma, op: "<", value: 200.0}
+    reason: untagged ggH 1-jet high pT
+  - id: ggH_1J_Med
+    label: ggH 1J Med
+    priority: 280
+    required_inputs: [N_jets_30, pT_gammagamma]
+    select_when:
+      all:
+        - {field: N_jets_30, op: "==", value: 1}
+        - {field: pT_gammagamma, op: ">=", value: 60.0}
+        - {field: pT_gammagamma, op: "<", value: 120.0}
+    reason: untagged ggH 1-jet medium pT
+  - id: ggH_1J_Low
+    label: ggH 1J Low
+    priority: 290
+    required_inputs: [N_jets_30, pT_gammagamma]
+    select_when:
+      all:
+        - {field: N_jets_30, op: "==", value: 1}
+        - {field: pT_gammagamma, op: "<", value: 60.0}
+    reason: untagged ggH 1-jet low pT
+  - id: ggH_0J_Fwd
+    label: ggH 0J Fwd
+    priority: 300
+    required_inputs: [N_jets_30, max_abs_photon_eta]
+    select_when:
+      all:
+        - {field: N_jets_30, op: "==", value: 0}
+        - {field: max_abs_photon_eta, op: ">", value: 0.95}
+    reason: untagged ggH forward-photon bin
+  - id: ggH_0J_Cen
+    label: ggH 0J Cen
+    priority: 310
+    required_inputs: [N_jets_30, max_abs_photon_eta]
+    select_when:
+      all:
+        - {field: N_jets_30, op: "==", value: 0}
+        - {field: max_abs_photon_eta, op: "<=", value: 0.95}
+    reason: untagged ggH central-photon bin

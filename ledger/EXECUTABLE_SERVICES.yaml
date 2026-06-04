@@ -260,6 +260,9 @@ services:
       - modular-pipeline/analysis/io/readers.py
       - modular-pipeline/analysis/objects/photons.py
       - modular-pipeline/analysis/objects/jets.py
+      - modular-pipeline/analysis/routing/config.py
+      - modular-pipeline/analysis/routing/predicates.py
+      - modular-pipeline/analysis/routing/router.py
       - modular-pipeline/analysis/selections/engine.py
       - modular-pipeline/analysis/hists/histmaker.py
       - modular-pipeline/analysis/section8_ads/observables.py
@@ -328,7 +331,8 @@ services:
       - Section 8 BDT metadata defaults to output-local `<outputs>/metadata/runs/` and `<outputs>/metadata/runs.jsonl`; central registries require explicit override paths.
       - Historical run-registry rows are immutable provenance records and path audits classify them rather than rewriting original paths.
       - `tools/compare_section8_outputs.py` is the bounded comparator for reference/candidate Section 8 output checks.
-      - The draft observable/category/model schemas remain non-authoritative, and the generic category router is not implemented.
+      - Production routing configs live under `configs/routing/`; draft observable/category/model schemas remain non-authoritative.
+      - Legacy Python category routers are retained as reference implementations for parity testing.
       - Needs additional direct unit tests for weighting, object selection, and histogram schemas beyond the Section 8 seam tests.
 
   - service_id: fit_builder

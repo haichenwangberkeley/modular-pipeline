@@ -15,6 +15,7 @@ DEFAULT_RUNTIME = {
     "analysis_implementation": {
         "version": "round1_5cat",
         "selection": "five_category_ptt",
+        "routing_config": "configs/routing/five_category_ptt.yaml",
         "description": "Original five-category pTt/VBF-enriched open-data pipeline.",
     },
     "tree_name": "analysis",

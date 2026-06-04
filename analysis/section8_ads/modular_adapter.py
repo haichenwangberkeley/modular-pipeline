@@ -7,10 +7,9 @@ from typing import Any
 import numpy as np
 
 from analysis.common import ensure_dir, read_json
-from analysis.section8_ads.categories import assign_categories
+from analysis.section8_ads.categories import route_section8_categories
 from analysis.section8_ads.classifiers import score_samples
 from analysis.section8_ads.pipeline import _process_sample
-from analysis.selections.engine import section8_category_id
 
 
 SECTION8_CUTFLOW_MAP = {
@@ -72,9 +71,13 @@ def process_sample_for_modular(
     for score_name in ("BDT_ttH", "BDT_VH", "BDT_VBF"):
         if score_name not in arrays:
             arrays[score_name] = np.full(len(arrays["event_number"]), np.nan)
-    assigned, reasons, blocked = assign_categories(arrays, _load_boundaries(section8_cfg))
+    routing_config = cfg.get("analysis_implementation", {}).get("routing_config")
+    routing_result = route_section8_categories(arrays, _load_boundaries(section8_cfg), routing_config)
+    assigned = routing_result.assigned_category
+    reasons = routing_result.assignment_reason
+    blocked = routing_result.assignment_blocked
     valid = (assigned != "blocked_missing_input") & (assigned != "unassigned")
-    category_ids = np.asarray([section8_category_id(label) for label in assigned[valid]], dtype=str)
+    category_ids = assigned[valid].astype(str)
 
     events = defaultdict(list)
     field_map = {

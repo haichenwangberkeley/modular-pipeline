@@ -1,0 +1,33 @@
+routing:
+  mode: ordered_first_match
+description: Non-production example showing mixed cut and learned-score routing.
+categories:
+  - id: boosted_tth
+    label: Boosted ttH
+    priority: 10
+    required_inputs: [N_jets_30, N_btag_25, BDT_ttH]
+    eligible_when:
+      all:
+        - {field: N_jets_30, op: ">=", value: 3}
+        - {field: N_btag_25, op: ">=", value: 1}
+    select_when:
+      all:
+        - {field: BDT_ttH, op: ">", value: 0.90}
+    block_if_missing: [BDT_ttH]
+    reason: boosted top-associated topology with high learned score
+    block_reason: BDT_ttH missing for boosted ttH
+  - id: high_pt_ggh
+    label: High-pT ggH
+    priority: 20
+    required_inputs: [pT_gammagamma]
+    select_when:
+      all:
+        - {field: pT_gammagamma, op: ">", value: 200.0}
+    reason: high diphoton transverse momentum fallback
+  - id: inclusive
+    label: Inclusive
+    priority: 999
+    required_inputs: []
+    select_when:
+      always: true
+    reason: inclusive ordered fallback
