@@ -107,6 +107,24 @@ modular-pipeline inspect \
   --write-state
 ```
 
+## Analysis Variants
+
+The repository currently ships two authoritative analysis-version selections in
+`analysis/analysis_versions.json`:
+
+- `round1_5cat`: the original five-category `pTt` and VBF-enriched analysis.
+- `round2_section8_bdt`: the Section 8 mixed cut-based and supplemental
+  BDT-based categorization path.
+
+Each version now resolves an explicit routing config through
+`analysis_implementation.routing_config`. The production routing YAML files live
+under `configs/routing/`.
+
+For ordinary category-design changes such as threshold scans or fallback-order
+studies, edit or override the routing YAML rather than changing Python code.
+The router interface, config schema, blocking semantics, and rerouting command
+are documented in `docs/CONFIG_DRIVEN_CATEGORY_ROUTING.md`.
+
 ## Artifacts
 
 Every modular run writes:

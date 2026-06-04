@@ -2,6 +2,13 @@
 
 This document explains how future agents should treat the Section 8 supplemental BDT artifacts during modular analysis optimization.
 
+Category routing is now config-backed. The authoritative ordered category
+declaration lives in `configs/routing/section8_ads_bdt.yaml`, and the generic
+router contract is documented in `docs/CONFIG_DRIVEN_CATEGORY_ROUTING.md`.
+Changing category order, cut thresholds, fallback structure, or score-bin
+thresholds for a study should normally happen by overriding the routing config,
+not by editing `analysis/section8_ads/categories.py`.
+
 ## Optimization Contract
 
 The BDT workflow is an optimization-aware service extension, not an official ATLAS classifier reproduction. A BDT training run must preserve enough metadata for later agents to decide whether artifacts can be reused or must be regenerated.
@@ -64,6 +71,13 @@ After component normalization, the trainer balances the total signal and backgro
 Boundary optimization is meaningful only when nominal analysis events have finite BDT scores. If a classifier has no finite scores, keep the ADS seed boundaries and record the blocked status.
 
 Optimized boundaries are local supplemental choices. Reports must always show the ADS seed boundaries next to optimized values.
+
+The intended split is:
+
+- retrain or rescore only when the classifier definition, training sample, or
+  model artifact changes;
+- reroute only when the category design changes but the observable table and
+  BDT scores are already available.
 
 ## Observable Builder Compatibility
 

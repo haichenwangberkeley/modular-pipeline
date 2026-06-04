@@ -22,6 +22,12 @@ Production configs live in `configs/routing/`:
 
 The non-production demo is `configs/routing/examples/mixed_strategy_demo.yaml`.
 
+Analysis versions select these configs explicitly through
+`analysis_implementation.routing_config` in `analysis/analysis_versions.json`.
+`analysis.config.versions.apply_analysis_version(..., routing_config=...)`
+provides a portable override path for studies that should not modify the
+authoritative version record.
+
 ## Predicate Schema
 
 Predicates are structured mappings, not Python expressions. Supported forms are:
@@ -77,6 +83,12 @@ python -m analysis.routing.route_npz \
 ```
 
 The command writes `routed_categories.npz` with `assigned_category`, `assignment_reason`, `assignment_blocked`, and `category_label`.
+
+For the five-category analysis, the default runtime uses
+`configs/routing/five_category_ptt.yaml`. For the Section 8 analysis, the
+default runtime uses `configs/routing/section8_ads_bdt.yaml`. Section 8 still
+allows boundary overrides from the optimized BDT-boundary artifact while
+keeping the underlying ordered category declaration in YAML.
 
 ## Out Of Scope
 
